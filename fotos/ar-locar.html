@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR con locaR.js - Muntanya100</title>
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- locaR.js -->
+    <script src="https://unpkg.com/locar@1.1.0/dist/locar.min.js"></script>
+    <style>
+        .arjs-loader {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .arjs-loader div {
+            text-align: center;
+            font-size: 1.25em;
+            color: white;
+        }
+        #exit-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            padding: 10px 15px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #debug-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 9999;
+            max-height: 30vh;
+            overflow-y: auto;
+        }
+        /* Panel de control */
+        #control-panel {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 9999;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .control-button {
+            margin: 5px;
+            padding: 5px 10px;
+            background-color: rgba(255,255,255,0.3);
+            border: none;
+            border-radius: 3px;
+            color: white;
+            cursor: pointer;
+        }
+        /* Selector de modo */
+        #mode-selector {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 9999;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        /* Mensaje de error */
+        #error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 10000;
+            max-width: 80%;
+            text-align: center;
+            display: none;
+        }
+        /* Botón de reintentar */
+        #retry-button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: white;
+            color: black;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        /* Indicador de distancia y dirección */
+        #distance-indicator {
+            position: fixed;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            z-index: 9998;
+            font-family: sans-serif;
+            font-size: 14px;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <div class="arjs-loader">
+        <div>Cargando experiencia AR con locaR.js, por favor espera...</div>
+    </div>
+    
+    <button id="exit-button" onclick="window.location.href='/Muntanya100/'">❌ Sortir</button>
+    
+    <div id="control-panel">
+        <div>Ajustar marcadores:</div>
+        <button class="control-button" onclick="adjustScale(2)">+ Tamaño</button>
+        <button class="control-button" onclick="adjustScale(0.5)">- Tamaño</button>
+        <button class="control-button" onclick="adjustHeight(1)">+ Altura</button>
+        <button class="control-button" onclick="adjustHeight(-1)">- Altura</button>
+        <button class="control-button" onclick="toggleVisibility()">Mostrar/Ocultar</button>
+        <button class="control-button" onclick="recreateEntities()">Recrear Marcadores</button>
+    </div>
+    
+    <div id="mode-selector">
+        <div>Modo:</div>
+        <button class="control-button" onclick="switchToLocationMode()">Ubicación Real</button>
+        <button class="control-button" onclick="switchToDirectionMode()">Dirección Visual</button>
+    </div>
+    
+    <div id="debug-panel">Iniciando AR con locaR.js...</div>
+    
+    <div id="error-message">
+        <div>Error al iniciar la experiencia AR</div>
+        <div id="error-details">Detalles del error</div>
+        <button id="retry-button" onclick="retryInitialization()">Reintentar</button>
+    </div>
+    
+    <div id="distance-indicator">
+        Distancia: <span id="current-distance">--</span> | Dirección: <span id="current-direction">--</span>
+    </div>
+    
+    <a-scene id="ar-scene">
+        <!-- Cámara -->
+        <a-entity id="camera" camera position="0 1.6 0" look-controls>
+            <!-- Reticle/cursor para interacción -->
+            <a-entity cursor="fuse: false; rayOrigin: mouse;" raycaster="objects: .clickable" position="0 0 -1"
+                      geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+                      material="color: white; shader: flat" visible="false">
+            </a-entity>
+            
+            <!-- Mensaje de estado -->
+            <a-entity 
+                text="value: Buscando posición GPS...; color: white; align: center; width: 3;"
+                position="0 -0.5 -1"
+                id="status-message">
+            </a-entity>
+            
+            <!-- Mensaje de instrucciones -->
+            <a-entity 
+                text="value: Buscando cims cercanos...; color: yellow; align: center; width: 3;"
+                position="0 0.5 -1"
+                id="instruction-message">
+            </a-entity>
+        </a-entity>
+        
+        <!-- Contenedor para los marcadores -->
+        <a-entity id="markers-container"></a-entity>
+        
+        <!-- Cielo -->
+        <a-sky color="#AADDFF"></a-sky>
+    </a-scene>
+    
+    <script>
+        // Configuración
+        const debugPanel = document.getElementById('debug-panel');
+        const loader = document.querySelector('.arjs-loader');
+        const markersContainer = document.getElementById('markers-container');
+        const errorMessage = document.getElementById('error-message');
+        const errorDetails = document.getElementById('error-details');
+        const distanceIndicator = document.getElementById('distance-indicator');
+        const currentDistanceEl = document.getElementById('current-distance');
+        const currentDirectionEl = document.getElementById('current-direction');
+        
+        // Variables de estado
+        let currentScale = 1;
+        let currentHeight = 0;
+        let entitiesVisible = true;
+        let cims = [];
+        let entitiesCreated = false;
+        let currentMode = 'direction'; // Modo por defecto
+        let userPosition = null;
+        let userHeading = null;
+        let initializationTimeout;
+        let selectedCim = null;
+        let locarInitialized = false;
+        
+        // Función para registrar mensajes en el panel de depuración
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugPanel.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+            console.log(`[${timestamp}] ${message}`); // También log a la consola para depuración
+        }
+        
+        // Función para mostrar errores
+        function showError(message) {
+            errorDetails.textContent = message;
+            errorMessage.style.display = 'block';
+            loader.style.display = 'none';
+            log(`ERROR: ${message}`);
+        }
+        
+        // Función para reintentar la inicialización
+        function retryInitialization() {
+            errorMessage.style.display = 'none';
+            loader.style.display = 'flex';
+            log('Reintentando inicialización...');
+            
+            // Limpiar cualquier timeout existente
+            if (initializationTimeout) {
+                clearTimeout(initializationTimeout);
+            }
+            
+            // Reiniciar la inicialización
+            setTimeout(() => {
+                initializeAR();
+            }, 1000);
+        }
+        
+        // Función para ajustar la escala de todos los marcadores
+        function adjustScale(factor) {
+            currentScale *= factor;
+            log(`Ajustando escala a: ${currentScale.toFixed(2)}`);
+            
+            document.querySelectorAll('.marker-entity').forEach(entity => {
+                const currentScale = entity.getAttribute('scale').split(' ').map(parseFloat);
+                entity.setAttribute('scale', `${currentScale[0] * factor} ${currentScale[1] * factor} ${currentScale[2] * factor}`);
+            });
+        }
+        
+        // Función para ajustar la altura de todos los marcadores
+        function adjustHeight(delta) {
+            currentHeight += delta;
+            log(`Ajustando altura a: ${currentHeight}`);
+            
+            document.querySelectorAll('.marker-entity').forEach(entity => {
+                const currentPosition = entity.getAttribute('position').split(' ').map(parseFloat);
+                entity.setAttribute('position', `${currentPosition[0]} ${currentPosition[1] + delta} ${currentPosition[2]}`);
+            });
+        }
+        
+        // Función para mostrar/ocultar marcadores
+        function toggleVisibility() {
+            entitiesVisible = !entitiesVisible;
+            log(`Marcadores ${entitiesVisible ? 'visibles' : 'ocultos'}`);
+            
+            document.querySelectorAll('.marker-entity').forEach(entity => {
+                entity.setAttribute('visible', entitiesVisible);
+            });
+        }
+        
+        // Función para recrear entidades
+        function recreateEntities() {
+            log('Recreando marcadores...');
+            
+            // Eliminar entidades existentes
+            while (markersContainer.firstChild) {
+                markersContainer.removeChild(markersContainer.firstChild);
+            }
+            
+            // Recrear entidades
+            if (currentMode === 'location') {
+                createLocationBasedEntities();
+            } else {
+                createDirectionBasedEntities();
+            }
+        }
+        
+        // Cambiar al modo de ubicación real
+        function switchToLocationMode() {
+            if (currentMode !== 'location') {
+                currentMode = 'location';
+                log('Cambiando a modo de ubicación real');
+                localStorage.setItem('ar-mode', 'location');
+                recreateEntities();
+            }
+        }
+        
+        // Cambiar al modo de dirección visual
+        function switchToDirectionMode() {
+            if (currentMode !== 'direction') {
+                currentMode = 'direction';
+                log('Cambiando a modo de dirección visual');
+                localStorage.setItem('ar-mode', 'direction');
+                recreateEntities();
+            }
+        }
+        
+        // Función para calcular la distancia entre dos puntos GPS
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radio de la Tierra en km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        
+        // Función para calcular el rumbo entre dos puntos GPS
+        function calculateBearing(lat1, lon1, lat2, lon2) {
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+            const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+                      Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+            const bearing = Math.atan2(y, x) * 180 / Math.PI;
+            return (bearing + 360) % 360;
+        }
+        
+        // Función para crear entidades basadas en ubicación GPS con locaR.js
+        function createLocationBasedEntities() {
+            if (cims.length === 0) {
+                log('No hay cims para mostrar');
+                return;
+            }
+            
+            if (!userPosition) {
+                log('Posición de usuario no disponible, usando modo de dirección visual');
+                createDirectionBasedEntities();
+                return;
+            }
+            
+            log(`Creando ${cims.length} marcadores basados en ubicación con locaR.js...`);
+            
+            // Inicializar locaR si aún no se ha hecho
+            if (!locarInitialized) {
+                try {
+                    // Inicializar locaR con la posición actual del usuario
+                    locar.init({
+                        position: {
+                            latitude: userPosition.latitude,
+                            longitude: userPosition.longitude
+                        }
+                    });
+                    locarInitialized = true;
+                    log('locaR.js inicializado correctamente');
+                } catch (error) {
+                    log(`Error al inicializar locaR.js: ${error.message}`);
+                    showError(`Error al inicializar locaR.js: ${error.message}`);
+                    return;
+                }
+            }
+            
+            cims.forEach(cim => {
+                log(`Creando entidad para ${cim.nom} en ${cim.latitude}, ${cim.longitude}`);
+                
+                // Calcular distancia aproximada
+                const distance = calculateDistance(
+                    userPosition.latitude, userPosition.longitude,
+                    cim.latitude, cim.longitude
+                );
+                
+                log(`Distancia a ${cim.nom}: ${distance.toFixed(2)} km`);
+                
+                // Calcular dirección (bearing)
+                const bearing = calculateBearing(
+                    userPosition.latitude, userPosition.longitude,
+                    cim.latitude, cim.longitude
+                );
+                
+                log(`Dirección a ${cim.nom}: ${bearing.toFixed(2)}°`);
+                
+                // Crear entidad para el marcador usando locaR
+                const entity = document.createElement('a-entity');
+                entity.setAttribute('class', 'marker-entity clickable');
+                entity.setAttribute('id', `cim-${cim.id}`);
+                entity.setAttribute('data-name', cim.nom);
+                entity.setAttribute('data-distance', distance.toFixed(1));
+                entity.setAttribute('data-altitude', cim.altitud);
+                entity.setAttribute('data-bearing', bearing.toFixed(1));
+                entity.setAttribute('data-latitude', cim.latitude);
+                entity.setAttribute('data-longitude', cim.longitude);
+                
+                // Usar locaR para posicionar la entidad
+                try {
+                    // Crear posición locaR
+                    const position = locar.latLonToWorld(cim.latitude, cim.longitude);
+                    
+                    // Ajustar la altura según la altitud del cim (escalado para visualización)
+                    const heightScale = 0.0001; // Factor de escala para la altura
+                    const baseHeight = 0; // Altura base
+                    const scaledHeight = baseHeight + (cim.altitud * heightScale);
+                    
+                    // Establecer posición
+                    entity.setAttribute('position', `${position.x} ${scaledHeight + currentHeight} ${position.z}`);
+                    entity.setAttribute('scale', `${currentScale} ${currentScale} ${currentScale}`);
+                    
+                    log(`Posición calculada para ${cim.nom}: x=${position.x.toFixed(2)}, y=${scaledHeight.toFixed(2)}, z=${position.z.toFixed(2)}`);
+                } catch (error) {
+                    log(`Error al posicionar ${cim.nom}: ${error.message}`);
+                    
+                    // Posición de respaldo si falla locaR
+                    const visualDistance = Math.min(100, 20 + 80 * Math.min(1, distance / 50));
+                    const bearingRad = bearing * Math.PI / 180;
+                    const x = -Math.sin(bearingRad) * visualDistance;
+                    const z = -Math.cos(bearingRad) * visualDistance;
+                    const y = 0;
+                    
+                    entity.setAttribute('position', `${x} ${y + currentHeight} ${z}`);
+                    entity.setAttribute('scale', `${currentScale} ${currentScale} ${currentScale}`);
+                    
+                    log(`Usando posición de respaldo para ${cim.nom}: x=${x.toFixed(2)}, y=${y.toFixed(2)}, z=${z.toFixed(2)}`);
+                }
+                
+                // Añadir marcador visible (esfera)
+                const marker = document.createElement('a-sphere');
+                marker.setAttribute('radius', '0.5');
+                marker.setAttribute('color', 'red');
+                marker.setAttribute('opacity', '0.8');
+                marker.setAttribute('position', '0 0 0');
+                marker.setAttribute('emissive', 'red');
+                marker.setAttribute('emissiveIntensity', '0.5');
+                entity.appendChild(marker);
+                
+                // Añadir cilindro para conectar con el texto
+                const cylinder = document.createElement('a-cylinder');
+                cylinder.setAttribute('radius', '0.1');
+                cylinder.setAttribute('height', '1');
+                cylinder.setAttribute('color', 'yellow');
+                cylinder.setAttribute('opacity', '0.5');
+                cylinder.setAttribute('position', '0 0.5 0');
+                entity.appendChild(cylinder);
+                
+                // Añadir texto con el nombre
+                const text = document.createElement('a-text');
+                text.setAttribute('value', cim.nom);
+                text.setAttribute('align', 'center');
+                text.setAttribute('color', 'white');
+                text.setAttribute('position', '0 1.2 0');
+                text.setAttribute('scale', '0.5 0.5 0.5');
+                text.setAttribute('look-at', '#camera');
+                entity.appendChild(text);
+                
+                // Añadir texto con altitud
+                const altText = document.createElement('a-text');
+                altText.setAttribute('value', `${cim.altitud}m`);
+                altText.setAttribute('align', 'center');
+                altText.setAttribute('color', 'yellow');
+                altText.setAttribute('position', '0 1 0');
+                altText.setAttribute('scale', '0.4 0.4 0.4');
+                altText.setAttribute('look-at', '#camera');
+                entity.appendChild(altText);
+                
+                // Añadir texto con distancia
+                const distText = document.createElement('a-text');
+                distText.setAttribute('value', `${distance.toFixed(1)} km`);
+                distText.setAttribute('align', 'center');
+                distText.setAttribute('color', 'lightgreen');
+                distText.setAttribute('position', '0 0.8 0');
+                distText.setAttribute('scale', '0.4 0.4 0.4');
+                distText.setAttribute('look-at', '#camera');
+                entity.appendChild(distText);
+                
+                // Añadir evento de clic para seleccionar el cim
+                entity.addEventListener('click', function() {
+                    selectCim(cim);
+                });
+                
+                // Añadir la entidad al contenedor
+                markersContainer.appendChild(entity);
+            });
+            
+            entitiesCreated = true;
+            
+            // Actualizar mensaje de instrucciones
+            const instructionEl = document.getElementById('instruction-message');
+            if (instructionEl) {
+                instructionEl.setAttribute(
+                    'text',
+                    `value: ${cims.length} cims cargados. Usa los controles para ajustar.; color: green; align: center; width: 3;`
+                );
+            }
+            
+            // Mostrar indicador de distancia
+            distanceIndicator.style.display = 'block';
+        }
+        
+        // Función para crear entidades basadas en dirección visual (modo demostración)
+        function createDirectionBasedEntities() {
+            if (cims.length === 0) {
+                log('No hay cims para mostrar');
+                return;
+            }
+            
+            log(`Creando ${cims.length} marcadores basados en dirección visual...`);
+            
+            // Posiciones fijas para demostración
+            const positions = [
+                { x: 0, y: 0, z: -10 },
+                { x: 5, y: 1, z: -8 },
+                { x: -5, y: 2, z: -12 },
+                { x: 8, y: 3, z: -15 }
+            ];
+            
+            cims.forEach((cim, index) => {
+                log(`Creando entidad para ${cim.nom} en posición visual`);
+                
+                // Usar posición fija para demostración
+                const pos = positions[index % positions.length];
+                
+                // Calcular distancia aproximada si hay posición de usuario
+                let distance = "?";
+                if (userPosition) {
+                    distance = calculateDistance(
+                        userPosition.latitude, userPosition.longitude,
+                        cim.latitude, cim.longitude
+                    ).toFixed(1);
+                }
+                
+                // Crear entidad para el marcador
+                const entity = document.createElement('a-entity');
+                entity.setAttribute('class', 'marker-entity clickable');
+                entity.setAttribute('id', `cim-${cim.id}`);
+                entity.setAttribute('position', `${pos.x} ${pos.y + currentHeight} ${pos.z}`);
+                entity.setAttribute('scale', `${currentScale} ${currentScale} ${currentScale}`);
+                entity.setAttribute('data-name', cim.nom);
+                entity.setAttribute('data-distance', distance);
+                entity.setAttribute('data-altitude', cim.altitud);
+                entity.setAttribute('data-latitude', cim.latitude);
+                entity.setAttribute('data-longitude', cim.longitude);
+                
+                // Añadir marcador visible (esfera)
+                const marker = document.createElement('a-sphere');
+                marker.setAttribute('radius', '0.5');
+                marker.setAttribute('color', 'red');
+                marker.setAttribute('opacity', '0.8');
+                marker.setAttribute('position', '0 0 0');
+                marker.setAttribute('emissive', 'red');
+                marker.setAttribute('emissiveIntensity', '0.5');
+                entity.appendChild(marker);
+                
+                // Añadir cilindro para conectar con el texto
+                const cylinder = document.createElement('a-cylinder');
+                cylinder.setAttribute('radius', '0.1');
+                cylinder.setAttribute('height', '1');
+                cylinder.setAttribute('color', 'yellow');
+                cylinder.setAttribute('opacity', '0.5');
+                cylinder.setAttribute('position', '0 0.5 0');
+                entity.appendChild(cylinder);
+                
+                // Añadir texto con el nombre
+                const text = document.createElement('a-text');
+                text.setAttribute('value', cim.nom);
+                text.setAttribute('align', 'center');
+                text.setAttribute('color', 'white');
+                text.setAttribute('position', '0 1.2 0');
+                text.setAttribute('scale', '0.5 0.5 0.5');
+                text.setAttribute('look-at', '#camera');
+                entity.appendChild(text);
+                
+                // Añadir texto con altitud
+                const altText = document.createElement('a-text');
+                altText.setAttribute('value', `${cim.altitud}m`);
+                altText.setAttribute('align', 'center');
+                altText.setAttribute('color', 'yellow');
+                altText.setAttribute('position', '0 1 0');
+                altText.setAttribute('scale', '0.4 0.4 0.4');
+                altText.setAttribute('look-at', '#camera');
+                entity.appendChild(altText);
+                
+                // Añadir texto con distancia
+                const distText = document.createElement('a-text');
+                distText.setAttribute('value', `${distance} km`);
+                distText.setAttribute('align', 'center');
+                distText.setAttribute('color', 'lightgreen');
+                distText.setAttribute('position', '0 0.8 0');
+                distText.setAttribute('scale', '0.4 0.4 0.4');
+                distText.setAttribute('look-at', '#camera');
+                entity.appendChild(distText);
+                
+                // Añadir evento de clic para seleccionar el cim
+                entity.addEventListener('click', function() {
+                    selectCim(cim);
+                });
+                
+                // Añadir la entidad al contenedor
+                markersContainer.appendChild(entity);
+            });
+            
+            entitiesCreated = true;
+            
+            // Actualizar mensaje de instrucciones
+            const instructionEl = document.getElementById('instruction-message');
+            if (instructionEl) {
+                instructionEl.setAttribute(
+                    'text',
+                    `value: Modo de demostración. Usa los controles para ajustar.; color: green; align: center; width: 3;`
+                );
+            }
+            
+            // Mostrar indicador de distancia
+            distanceIndicator.style.display = 'block';
+        }
+        
+        // Función para seleccionar un cim
+        function selectCim(cim) {
+            selectedCim = cim;
+            log(`Cim seleccionado: ${cim.nom}`);
+            
+            // Actualizar indicador de distancia
+            if (userPosition) {
+                const distance = calculateDistance(
+                    userPosition.latitude, userPosition.longitude,
+                    cim.latitude, cim.longitude
+                );
+                const bearing = calculateBearing(
+                    userPosition.latitude, userPosition.longitude,
+                    cim.latitude, cim.longitude
+                );
+                
+                currentDistanceEl.textContent = `${distance.toFixed(1)} km`;
+                currentDirectionEl.textContent = `${bearing.toFixed(0)}°`;
+            }
+            
+            // Resaltar el cim seleccionado
+            document.querySelectorAll('.marker-entity').forEach(entity => {
+                if (entity.id === `cim-${cim.id}`) {
+                    // Resaltar el seleccionado
+                    const marker = entity.querySelector('a-sphere');
+                    if (marker) {
+                        marker.setAttribute('color', 'green');
+                        marker.setAttribute('emissive', 'green');
+                    }
+                } else {
+                    // Restaurar los demás
+                    const marker = entity.querySelector('a-sphere');
+                    if (marker) {
+                        marker.setAttribute('color', 'red');
+                        marker.setAttribute('emissive', 'red');
+                    }
+                }
+            });
+        }
+        
+        // Función para actualizar la orientación de los marcadores
+        function updateOrientation(heading) {
+            if (!userHeading) {
+                userHeading = heading;
+                log(`Orientación inicial: ${heading.toFixed(1)}°`);
+            } else {
+                // Solo actualizar si hay un cambio significativo
+                const diff = Math.abs(heading - userHeading);
+                if (diff > 5 && diff < 355) {
+                    userHeading = heading;
+                    log(`Orientación actualizada: ${heading.toFixed(1)}°`);
+                    
+                    // Actualizar dirección al cim seleccionado
+                    if (selectedCim && userPosition) {
+                        const bearing = calculateBearing(
+                            userPosition.latitude, userPosition.longitude,
+                            selectedCim.latitude, selectedCim.longitude
+                        );
+                        
+                        // Calcular dirección relativa (diferencia entre rumbo y orientación)
+                        const relativeDirection = (bearing - heading + 360) % 360;
+                        let directionText;
+                        
+                        if (relativeDirection > 337.5 || relativeDirection <= 22.5) {
+                            directionText = "Frente";
+                        } else if (relativeDirection > 22.5 && relativeDirection <= 67.5) {
+                            directionText = "Frente-Derecha";
+                        } else if (relativeDirection > 67.5 && relativeDirection <= 112.5) {
+                            directionText = "Derecha";
+                        } else if (relativeDirection > 112.5 && relativeDirection <= 157.5) {
+                            directionText = "Atrás-Derecha";
+                        } else if (relativeDirection > 157.5 && relativeDirection <= 202.5) {
+                            directionText = "Atrás";
+                        } else if (relativeDirection > 202.5 && relativeDirection <= 247.5) {
+                            directionText = "Atrás-Izquierda";
+                        } else if (relativeDirection > 247.5 && relativeDirection <= 292.5) {
+                            directionText = "Izquierda";
+                        } else {
+                            directionText = "Frente-Izquierda";
+                        }
+                        
+                        currentDirectionEl.textContent = `${bearing.toFixed(0)}° (${directionText})`;
+                    }
+                }
+            }
+        }
+        
+        // Inicializar la experiencia AR
+        function initializeAR() {
+            log('Inicializando experiencia AR con locaR.js...');
+            
+            // Establecer un timeout para detectar si la inicialización se queda colgada
+            initializationTimeout = setTimeout(() => {
+                if (!entitiesCreated) {
+                    showError('La inicialización está tardando demasiado. Intenta cambiar al modo de demostración.');
+                }
+            }, 15000); // 15 segundos
+            
+            // Cargar cims desde localStorage
+            try {
+                const cimsData = localStorage.getItem('ar-cims');
+                if (cimsData) {
+                    cims = JSON.parse(cimsData);
+                    log(`Cargados ${cims.length} cims desde localStorage`);
+                } else {
+                    log('No se encontraron datos de cims en localStorage');
+                    
+                    // Cargar cims de ejemplo si no hay datos en localStorage
+                    cims = [
+                        {
+                            "id": 1,
+                            "nom": "Santa Brígida",
+                            "latitude": 42.0284,
+                            "longitude": 2.6166,
+                            "altitud": 464,
+                            "localització": "Amer, La Selva",
+                            "descripció": "Santa Brígida és una muntanya emblemàtica del poble d'Amer, amb bones vistes i una ermita al cim."
+                        },
+                        {
+                            "id": 2,
+                            "nom": "Puigsacalm",
+                            "latitude": 42.1019,
+                            "longitude": 2.4606,
+                            "altitud": 1515,
+                            "localització": "Vall d'en Bas, Garrotxa",
+                            "descripció": "El Puigsacalm és un dels cims més emblemàtics de la Garrotxa, amb vistes panoràmiques excepcionals."
+                        },
+                        {
+                            "id": 3,
+                            "nom": "Canigó",
+                            "latitude": 42.5186,
+                            "longitude": 2.4558,
+                            "altitud": 2784,
+                            "localització": "Catalunya Nord",
+                            "descripció": "El Canigó és una muntanya mítica de la cultura catalana."
+                        },
+                        {
+                            "id": 4,
+                            "nom": "Pedraforca",
+                            "latitude": 42.2397,
+                            "longitude": 1.7062,
+                            "altitud": 2506,
+                            "localització": "Berguedà",
+                            "descripció": "El Pedraforca és una de les muntanyes més emblemàtiques de Catalunya."
+                        }
+                    ];
+                    log('Cargados cims de ejemplo');
+                }
+                
+                // Verificar el modo seleccionado en localStorage
+                const savedMode = localStorage.getItem('ar-mode');
+                if (savedMode && (savedMode === 'location' || savedMode === 'direction')) {
+                    currentMode = savedMode;
+                    log(`Modo cargado desde localStorage: ${currentMode}`);
+                }
+            } catch (error) {
+                log(`Error al cargar cims: ${error.message}`);
+                showError(`Error al cargar datos: ${error.message}`);
+            }
+            
+            // Crear entidades inmediatamente en modo dirección visual para mostrar algo
+            if (currentMode === 'direction') {
+                createDirectionBasedEntities();
+            }
+            
+            // Verificar permisos de geolocalización
+            if ('geolocation' in navigator) {
+                log('Geolocalización disponible');
+                
+                // Solicitar permisos de geolocalización
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        userPosition = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        };
+                        
+                        log(`Posición obtenida: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
+                        
+                        // Actualizar mensaje de estado
+                        const statusEl = document.getElementById('status-message');
+                        if (statusEl) {
+                            statusEl.setAttribute(
+                                'text',
+                                `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}; color: white; align: center; width: 3;`
+                            );
+                        }
+                        
+                        // Crear entidades para los cims si estamos en modo ubicación
+                        if (currentMode === 'location' && !entitiesCreated) {
+                            createLocationBasedEntities();
+                        }
+                    },
+                    error => {
+                        log(`Error de geolocalización: ${error.message} (código: ${error.code})`);
+                        
+                        // Actualizar mensaje de instrucciones
+                        const instructionEl = document.getElementById('instruction-message');
+                        if (instructionEl) {
+                            instructionEl.setAttribute(
+                                'text',
+                                `value: Error de geolocalización: ${error.message}; color: red; align: center; width: 3;`
+                            );
+                        }
+                        
+                        // Cambiar a modo dirección visual si hay error de geolocalización
+                        if (currentMode === 'location') {
+                            log('Cambiando a modo dirección visual debido a error de geolocalización');
+                            currentMode = 'direction';
+                            if (!entitiesCreated) {
+                                createDirectionBasedEntities();
+                            }
+                        }
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+                
+                // Monitorear cambios en la posición
+                const watchId = navigator.geolocation.watchPosition(
+                    position => {
+                        userPosition = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        };
+                        
+                        const statusEl = document.getElementById('status-message');
+                        if (statusEl) {
+                            statusEl.setAttribute(
+                                'text',
+                                `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}, Precisión: ${userPosition.accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
+                            );
+                        }
+                        
+                        log(`Posición actualizada: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
+                        
+                        // Actualizar posiciones de los marcadores si estamos en modo ubicación y locaR está inicializado
+                        if (currentMode === 'location' && locarInitialized && entitiesCreated) {
+                            // Actualizar la posición del usuario en locaR
+                            locar.updatePosition({
+                                latitude: userPosition.latitude,
+                                longitude: userPosition.longitude
+                            });
+                            
+                            // Actualizar las posiciones de los marcadores
+                            document.querySelectorAll('.marker-entity').forEach(entity => {
+                                const cimLat = parseFloat(entity.getAttribute('data-latitude'));
+                                const cimLon = parseFloat(entity.getAttribute('data-longitude'));
+                                
+                                try {
+                                    // Recalcular posición con locaR
+                                    const position = locar.latLonToWorld(cimLat, cimLon);
+                                    const currentY = entity.getAttribute('position').split(' ')[1];
+                                    
+                                    entity.setAttribute('position', `${position.x} ${currentY} ${position.z}`);
+                                } catch (error) {
+                                    // Si falla, no hacer nada y mantener la posición actual
+                                }
+                                
+                                // Actualizar distancia
+                                const distance = calculateDistance(
+                                    userPosition.latitude, userPosition.longitude,
+                                    cimLat, cimLon
+                                );
+                                
+                                const distTexts = entity.querySelectorAll('a-text');
+                                if (distTexts.length >= 3) {
+                                    distTexts[2].setAttribute('value', `${distance.toFixed(1)} km`);
+                                }
+                                
+                                // Actualizar indicador de distancia si este es el cim seleccionado
+                                if (selectedCim && entity.id === `cim-${selectedCim.id}`) {
+                                    currentDistanceEl.textContent = `${distance.toFixed(1)} km`;
+                                }
+                            });
+                        }
+                    },
+                    error => {
+                        log(`Error en watchPosition: ${error.message}`);
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+            } else {
+                log('Geolocalización NO disponible en este dispositivo/navegador');
+                
+                // Actualizar mensaje de instrucciones
+                const instructionEl = document.getElementById('instruction-message');
+                if (instructionEl) {
+                    instructionEl.setAttribute(
+                        'text',
+                        `value: Geolocalización no disponible en este dispositivo.; color: red; align: center; width: 3;`
+                    );
+                }
+                
+                // Crear entidades en modo dirección visual si no hay geolocalización
+                currentMode = 'direction';
+                if (!entitiesCreated) {
+                    createDirectionBasedEntities();
+                }
+            }
+            
+            // Configurar eventos de orientación del dispositivo
+            if (window.DeviceOrientationEvent) {
+                log('DeviceOrientationEvent disponible');
+                
+                // Función para manejar la orientación
+                const handleOrientation = (event) => {
+                    let heading = null;
+                    
+                    // iOS (webkit)
+                    if (event.webkitCompassHeading) {
+                        heading = event.webkitCompassHeading;
+                    } 
+                    // Android/otros
+                    else if (event.alpha) {
+                        heading = 360 - event.alpha;
+                    }
+                    
+                    if (heading !== null) {
+                        updateOrientation(heading);
+                    }
+                };
+                
+                // Verificar si necesitamos solicitar permiso (iOS 13+)
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    log('Se requiere permiso para DeviceOrientation (iOS 13+)');
+                    
+                    // Crear botón para solicitar permiso
+                    const permissionBtn = document.createElement('button');
+                    permissionBtn.textContent = 'Permitir acceso a sensores';
+                    permissionBtn.style.position = 'fixed';
+                    permissionBtn.style.top = '50%';
+                    permissionBtn.style.left = '50%';
+                    permissionBtn.style.transform = 'translate(-50%, -50%)';
+                    permissionBtn.style.padding = '15px 20px';
+                    permissionBtn.style.backgroundColor = '#4285F4';
+                    permissionBtn.style.color = 'white';
+                    permissionBtn.style.border = 'none';
+                    permissionBtn.style.borderRadius = '5px';
+                    permissionBtn.style.zIndex = '10000';
+                    
+                    permissionBtn.addEventListener('click', () => {
+                        DeviceOrientationEvent.requestPermission()
+                            .then(response => {
+                                if (response === 'granted') {
+                                    log('Permiso de orientación concedido');
+                                    permissionBtn.remove();
+                                    window.addEventListener('deviceorientation', handleOrientation);
+                                } else {
+                                    log(`Permiso de orientación denegado: ${response}`);
+                                    showError('Se requiere acceso a los sensores para la experiencia AR completa');
+                                }
+                            })
+                            .catch(error => {
+                                log(`Error al solicitar permiso: ${error}`);
+                                showError(`Error al solicitar permiso: ${error}`);
+                            });
+                    });
+                    
+                    document.body.appendChild(permissionBtn);
+                } else {
+                    // No se requiere permiso, añadir listener directamente
+                    window.addEventListener('deviceorientation', handleOrientation);
+                }
+            } else {
+                log('DeviceOrientationEvent NO disponible');
+            }
+        }
+        
+        // Ocultar el loader cuando la escena esté lista
+        document.querySelector('a-scene').addEventListener('loaded', () => {
+            log('Escena AR cargada');
+            loader.style.display = 'none';
+            
+            // Limpiar el timeout de inicialización
+            if (initializationTimeout) {
+                clearTimeout(initializationTimeout);
+            }
+        });
+        
+        // Iniciar la experiencia AR
+        window.addEventListener('load', () => {
+            log('Página cargada, iniciando AR...');
+            initializeAR();
+        });
+    </script>
+</body>
+</html>
