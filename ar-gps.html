@@ -97,7 +97,7 @@
         renderer="logarithmicDepthBuffer: true;"
         loading-screen="enabled: false">
         
-        <a-camera gps-camera="minDistance: 1; maxDistance: 100000; gpsMinAccuracy: 100;" rotation-reader>
+        <a-camera gps-projected-camera="gpsMinDistance: 5;" rotation-reader>
             <!-- Mensaje de estado -->
             <a-entity 
                 text="value: Buscando posición GPS...; color: white; align: center; width: 3;"
@@ -141,6 +141,13 @@
                 const currentScale = text.getAttribute('scale').split(' ').map(parseFloat);
                 text.setAttribute('scale', `${currentScale[0] * factor} ${currentScale[1] * factor} ${currentScale[2] * factor}`);
             });
+            
+            document.querySelectorAll('a-cylinder').forEach(cylinder => {
+                const currentRadius = parseFloat(cylinder.getAttribute('radius'));
+                const currentHeight = parseFloat(cylinder.getAttribute('height'));
+                cylinder.setAttribute('radius', currentRadius * factor);
+                cylinder.setAttribute('height', currentHeight * factor);
+            });
         }
         
         // Función para ajustar la altura de todos los marcadores
@@ -148,7 +155,7 @@
             currentHeight += delta;
             log(`Ajustando altura a: ${currentHeight}`);
             
-            document.querySelectorAll('a-entity[gps-entity-place]').forEach(entity => {
+            document.querySelectorAll('a-entity[gps-projected-entity-place]').forEach(entity => {
                 const children = entity.children;
                 for (let i = 0; i < children.length; i++) {
                     const child = children[i];
@@ -166,7 +173,7 @@
             entitiesVisible = !entitiesVisible;
             log(`Marcadores ${entitiesVisible ? 'visibles' : 'ocultos'}`);
             
-            document.querySelectorAll('a-entity[gps-entity-place]').forEach(entity => {
+            document.querySelectorAll('a-entity[gps-projected-entity-place]').forEach(entity => {
                 entity.setAttribute('visible', entitiesVisible);
             });
         }
@@ -199,7 +206,7 @@
                         "longitude": 2.4606,
                         "altitud": 1515,
                         "localització": "Vall d'en Bas, Garrotxa",
-                        "descripció": "El Puigsacalm és un dels cims més emblemàtics de la Garrotxa, amb vistes panoràmiques excepcionals."
+                        "descripció": "El Puigsacalm és un dels cims més emblemàtics de la Garrotxa, amb vistes panoràmiques excepcionales."
                     }
                 ];
                 log('Cargados cims de ejemplo');
@@ -235,14 +242,14 @@
                             
                             log(`Distancia a ${cim.nom}: ${distance.toFixed(2)} km`);
                             
-                            // Crear entidad GPS
+                            // Crear entidad GPS con el nuevo componente gps-projected-entity-place
                             const entity = document.createElement('a-entity');
-                            entity.setAttribute('gps-entity-place', `latitude: ${cim.latitude}; longitude: ${cim.longitude}`);
+                            entity.setAttribute('gps-projected-entity-place', `latitude: ${cim.latitude}; longitude: ${cim.longitude}`);
                             entity.setAttribute('id', `cim-${cim.id}`);
                             
                             // Añadir marcador grande y brillante
                             const marker = document.createElement('a-sphere');
-                            marker.setAttribute('radius', '2000'); // Mucho más grande
+                            marker.setAttribute('radius', '50'); // Tamaño más razonable para el nuevo sistema
                             marker.setAttribute('color', 'red');
                             marker.setAttribute('opacity', '0.8');
                             marker.setAttribute('position', '0 0 0'); // A nivel del suelo
@@ -252,41 +259,41 @@
                             
                             // Añadir cilindro para conectar con el texto
                             const cylinder = document.createElement('a-cylinder');
-                            cylinder.setAttribute('radius', '500');
-                            cylinder.setAttribute('height', '4000');
+                            cylinder.setAttribute('radius', '20');
+                            cylinder.setAttribute('height', '100');
                             cylinder.setAttribute('color', 'yellow');
                             cylinder.setAttribute('opacity', '0.5');
-                            cylinder.setAttribute('position', '0 2000 0');
+                            cylinder.setAttribute('position', '0 50 0');
                             entity.appendChild(cylinder);
                             
-                            // Añadir texto con el nombre (mucho más grande)
+                            // Añadir texto con el nombre
                             const text = document.createElement('a-text');
                             text.setAttribute('value', cim.nom);
-                            text.setAttribute('look-at', '[gps-camera]');
-                            text.setAttribute('scale', '2000 2000 2000'); // Mucho más grande
+                            text.setAttribute('look-at', '[gps-projected-camera]');
+                            text.setAttribute('scale', '50 50 50');
                             text.setAttribute('align', 'center');
                             text.setAttribute('color', 'white');
-                            text.setAttribute('position', '0 4000 0'); // Más alto
+                            text.setAttribute('position', '0 120 0');
                             entity.appendChild(text);
                             
                             // Añadir texto con altitud
                             const altText = document.createElement('a-text');
                             altText.setAttribute('value', `${cim.altitud}m`);
-                            altText.setAttribute('look-at', '[gps-camera]');
-                            altText.setAttribute('scale', '1500 1500 1500'); // Más grande
+                            altText.setAttribute('look-at', '[gps-projected-camera]');
+                            altText.setAttribute('scale', '40 40 40');
                             altText.setAttribute('align', 'center');
                             altText.setAttribute('color', 'yellow');
-                            altText.setAttribute('position', '0 3500 0');
+                            altText.setAttribute('position', '0 100 0');
                             entity.appendChild(altText);
                             
                             // Añadir texto con distancia
                             const distText = document.createElement('a-text');
                             distText.setAttribute('value', `${distance.toFixed(1)} km`);
-                            distText.setAttribute('look-at', '[gps-camera]');
-                            distText.setAttribute('scale', '1500 1500 1500'); // Más grande
+                            distText.setAttribute('look-at', '[gps-projected-camera]');
+                            distText.setAttribute('scale', '40 40 40');
                             distText.setAttribute('align', 'center');
                             distText.setAttribute('color', 'lightgreen');
-                            distText.setAttribute('position', '0 3000 0');
+                            distText.setAttribute('position', '0 80 0');
                             entity.appendChild(distText);
                             
                             scene.appendChild(entity);
