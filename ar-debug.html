@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test AR.js</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        .arjs-loader {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .arjs-loader div {
+            text-align: center;
+            font-size: 1.25em;
+            color: white;
+        }
+        #debug-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 9999;
+            max-height: 30vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <div class="arjs-loader">
+        <div>Cargando experiencia AR, por favor espera...</div>
+    </div>
+    
+    <div id="debug-panel">Iniciando depuración...</div>
+    
+    <a-scene
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960;"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true;"
+        loading-screen="enabled: false">
+        
+        <a-camera gps-camera="minDistance: 5; maxDistance: 100000; gpsMinAccuracy: 100;" rotation-reader></a-camera>
+        
+        <!-- Marcadores de prueba -->
+        <a-entity id="santa-brigida" gps-entity-place="latitude: 42.0284; longitude: 2.6166">
+            <a-cylinder color="red" height="300" radius="150" opacity="0.8" position="0 150 0"></a-cylinder>
+            <a-text value="Santa Brígida" look-at="[gps-camera]" scale="500 500 500" align="center" color="white" position="0 350 0"></a-text>
+            <a-text value="464m" look-at="[gps-camera]" scale="350 350 350" align="center" color="yellow" position="0 300 0"></a-text>
+        </a-entity>
+        
+        <a-entity id="puigsacalm" gps-entity-place="latitude: 42.1019; longitude: 2.4606">
+            <a-cylinder color="red" height="300" radius="150" opacity="0.8" position="0 150 0"></a-cylinder>
+            <a-text value="Puigsacalm" look-at="[gps-camera]" scale="500 500 500" align="center" color="white" position="0 350 0"></a-text>
+            <a-text value="1515m" look-at="[gps-camera]" scale="350 350 350" align="center" color="yellow" position="0 300 0"></a-text>
+        </a-entity>
+    </a-scene>
+    
+    <script>
+        const debugPanel = document.getElementById('debug-panel');
+        const loader = document.querySelector('.arjs-loader');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugPanel.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+        }
+        
+        // Verificar permisos de geolocalización
+        if ('geolocation' in navigator) {
+            log('Geolocalización disponible');
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    log(`Posición obtenida: ${position.coords.latitude}, ${position.coords.longitude} (precisión: ${position.coords.accuracy}m)`);
+                    
+                    // Calcular distancias a los cims
+                    const cims = [
+                        { nombre: "Santa Brígida", lat: 42.0284, lon: 2.6166 },
+                        { nombre: "Puigsacalm", lat: 42.1019, lon: 2.4606 }
+                    ];
+                    
+                    cims.forEach(cim => {
+                        // Calcular distancia aproximada en km usando la fórmula de Haversine
+                        const R = 6371; // Radio de la Tierra en km
+                        const dLat = (cim.lat - position.coords.latitude) * Math.PI / 180;
+                        const dLon = (cim.lon - position.coords.longitude) * Math.PI / 180;
+                        const a = 
+                            Math.sin(dLat/2) * Math.sin(dLat/2) +
+                            Math.cos(position.coords.latitude * Math.PI / 180) * Math.cos(cim.lat * Math.PI / 180) * 
+                            Math.sin(dLon/2) * Math.sin(dLon/2);
+                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                        const distance = R * c;
+                        
+                        log(`Distancia a ${cim.nombre}: ${distance.toFixed(2)} km`);
+                    });
+                },
+                error => {
+                    log(`Error de geolocalización: ${error.message} (código: ${error.code})`);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+            
+            // Monitorear cambios en la posición
+            const watchId = navigator.geolocation.watchPosition(
+                position => {
+                    log(`Posición actualizada: ${position.coords.latitude}, ${position.coords.longitude} (precisión: ${position.coords.accuracy}m)`);
+                },
+                error => {
+                    log(`Error en watchPosition: ${error.message}`);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        } else {
+            log('Geolocalización NO disponible en este dispositivo/navegador');
+        }
+        
+        // Verificar permisos de orientación del dispositivo
+        if ('DeviceOrientationEvent' in window) {
+            log('DeviceOrientationEvent disponible');
+            
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                log('Requiere permiso explícito (iOS 13+)');
+                
+                // Crear botón para solicitar permiso en iOS
+                const permissionBtn = document.createElement('button');
+                permissionBtn.innerHTML = 'Permitir acceso a sensores';
+                permissionBtn.style.position = 'fixed';
+                permissionBtn.style.top = '50%';
+                permissionBtn.style.left = '50%';
+                permissionBtn.style.transform = 'translate(-50%, -50%)';
+                permissionBtn.style.padding = '15px 20px';
+                permissionBtn.style.backgroundColor = '#4285F4';
+                permissionBtn.style.color = 'white';
+                permissionBtn.style.border = 'none';
+                permissionBtn.style.borderRadius = '5px';
+                permissionBtn.style.zIndex = '10000';
+                
+                permissionBtn.addEventListener('click', () => {
+                    DeviceOrientationEvent.requestPermission()
+                        .then(response => {
+                            if (response === 'granted') {
+                                log('Permiso de orientación concedido');
+                                permissionBtn.remove();
+                            } else {
+                                log(`Permiso de orientación denegado: ${response}`);
+                            }
+                        })
+                        .catch(error => {
+                            log(`Error al solicitar permiso: ${error}`);
+                        });
+                });
+                
+                document.body.appendChild(permissionBtn);
+            }
+            
+            window.addEventListener('deviceorientation', event => {
+                // Solo registrar cada 2 segundos para no saturar el panel
+                if (Date.now() % 2000 < 100) {
+                    const alpha = event.alpha ? event.alpha.toFixed(2) : 'N/A'; // Brújula (0-360)
+                    const beta = event.beta ? event.beta.toFixed(2) : 'N/A';   // Inclinación frontal/trasera (-180 a 180)
+                    const gamma = event.gamma ? event.gamma.toFixed(2) : 'N/A'; // Inclinación izquierda/derecha (-90 a 90)
+                    
+                    log(`Orientación: α=${alpha}° β=${beta}° γ=${gamma}°`);
+                }
+            });
+        } else {
+            log('DeviceOrientationEvent NO disponible');
+        }
+        
+        // Ocultar el loader cuando la escena esté lista
+        document.querySelector('a-scene').addEventListener('loaded', () => {
+            log('Escena AR cargada');
+            loader.style.display = 'none';
+        });
+        
+        // Monitorear eventos de AR.js
+        document.addEventListener('gps-camera-update-position', e => {
+            const { latitude, longitude, accuracy } = e.detail.position;
+            log(`AR.js posición actualizada: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (precisión: ${accuracy.toFixed(2)}m)`);
+        });
+    </script>
+</body>
+</html>
+
