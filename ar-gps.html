@@ -313,7 +313,7 @@
                 const yBearing = Math.sin(dLon) * Math.cos(cim.latitude * Math.PI / 180);
                 const xBearing = Math.cos(userPosition.latitude * Math.PI / 180) * Math.sin(cim.latitude * Math.PI / 180) -
                           Math.sin(userPosition.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * Math.cos(dLon);
-                const bearing = Math.atan2(y, x) * 180 / Math.PI;
+                const bearing = Math.atan2(yBearing, xBearing) * 180 / Math.PI;
                 const bearingNormalized = (bearing + 360) % 360;
                 
                 log(`Dirección a ${cim.nom}: ${bearingNormalized.toFixed(2)}°`);
@@ -339,6 +339,7 @@
                 const y = 0; // Altura base
                 
                 entity.setAttribute('position', `${x} ${y} ${z}`);
+                
                 entity.setAttribute('scale', '1 1 1');
                 
                 // Añadir marcador visible (esfera)
