@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test AR Simplificado</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        .arjs-loader {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .arjs-loader div {
+            text-align: center;
+            font-size: 1.25em;
+            color: white;
+        }
+        #exit-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            padding: 10px 15px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <div class="arjs-loader">
+        <div>Cargando experiencia AR simplificada, por favor espera...</div>
+    </div>
+    
+    <button id="exit-button" onclick="window.location.href='/Muntanya100/'">❌ Sortir</button>
+    
+    <a-scene
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true;"
+        loading-screen="enabled: false">
+        
+        <a-camera gps-camera="minDistance: 1; maxDistance: 1000000; gpsMinAccuracy: 1000;" rotation-reader>
+            <!-- Mensaje de estado -->
+            <a-entity 
+                text="value: Buscando posición GPS...; color: white; align: center; width: 3;"
+                position="0 -0.5 -1"
+                id="status-message">
+            </a-entity>
+            
+            <!-- Mensaje de instrucciones -->
+            <a-entity 
+                text="value: Mueve el dispositivo lentamente para buscar cims; color: yellow; align: center; width: 3;"
+                position="0 0.5 -1"
+                id="instruction-message">
+            </a-entity>
+        </a-camera>
+        
+        <!-- Marcadores fijos (no basados en GPS) para pruebas -->
+        <a-entity position="0 0 -10">
+            <a-sphere color="red" radius="1" opacity="0.8"></a-sphere>
+            <a-text value="Marcador de prueba (10m)" align="center" color="white" position="0 1.5 0" scale="1 1 1"></a-text>
+        </a-entity>
+        
+        <a-entity position="5 0 -15">
+            <a-sphere color="blue" radius="1.5" opacity="0.8"></a-sphere>
+            <a-text value="Marcador de prueba (15m)" align="center" color="white" position="0 2 0" scale="1.5 1.5 1.5"></a-text>
+        </a-entity>
+        
+        <a-entity position="-5 0 -20">
+            <a-sphere color="green" radius="2" opacity="0.8"></a-sphere>
+            <a-text value="Marcador de prueba (20m)" align="center" color="white" position="0 2.5 0" scale="2 2 2"></a-text>
+        </a-entity>
+    </a-scene>
+    
+    <script>
+        // Actualizar mensaje de estado cuando se obtiene la posición GPS
+        document.addEventListener('gps-camera-update-position', e => {
+            const { latitude, longitude, accuracy } = e.detail.position;
+            const statusEl = document.getElementById('status-message');
+            if (statusEl) {
+                statusEl.setAttribute(
+                    'text',
+                    `value: Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}, Precisión: ${accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
+                );
+            }
+            
+            // Cambiar el mensaje de instrucciones después de obtener la posición
+            const instructionEl = document.getElementById('instruction-message');
+            if (instructionEl) {
+                instructionEl.setAttribute(
+                    'text',
+                    `value: Posición GPS obtenida. Busca los marcadores a tu alrededor.; color: green; align: center; width: 3;`
+                );
+            }
+        });
+        
+        // Ocultar el loader cuando la escena esté lista
+        document.querySelector('a-scene').addEventListener('loaded', () => {
+            document.querySelector('.arjs-loader').style.display = 'none';
+        });
+    </script>
+</body>
+</html>
+
