@@ -1,13 +1,12 @@
 [
-    {
-      "id": 1,
-      "nom": "Santa Brígida",
-      "lat": 42.0284,
-      "lon": 2.6166,
-      "altitud": 464,
-      "localització": "Amer, La Selva",
-      "descripció": "Santa Brígida és una muntanya emblemàtica del poble d'Amer, amb bones vistes i una ermita al cim.",
-      "imatge": "https://photo620x400.mnstatic.com/8e3529f14b041137f961ec586ca6226c/ermita-de-santa-brigida-damer.jpg"
-    }
-  ]
-  
+  {
+    "id": 1,
+    "nom": "Santa Brígida",
+    "latitude": 42.0284,
+    "longitude": 2.6166,
+    "altitud": 464,
+    "localització": "Amer, La Selva",
+    "descripció": "Santa Brígida és una muntanya emblemàtica del poble d'Amer, amb bones vistes i una ermita al cim.",
+    "imatge": "https://photo620x400.mnstatic.com/8e3529f14b041137f961ec586ca6226c/ermita-de-santa-brigida-damer.jpg"
+  }
+]
