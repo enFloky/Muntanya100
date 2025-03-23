@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test AR Simplificado</title>
+    <title>Test AR Simplificado - Muntanya100</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
@@ -52,17 +52,17 @@
         renderer="logarithmicDepthBuffer: true;"
         loading-screen="enabled: false">
         
-        <a-camera gps-camera="minDistance: 1; maxDistance: 1000000; gpsMinAccuracy: 1000;" rotation-reader>
+        <a-camera position="0 1.6 0" look-controls>
             <!-- Mensaje de estado -->
             <a-entity 
-                text="value: Buscando posición GPS...; color: white; align: center; width: 3;"
+                text="value: Modo de demostración AR; color: white; align: center; width: 3;"
                 position="0 -0.5 -1"
                 id="status-message">
             </a-entity>
             
             <!-- Mensaje de instrucciones -->
             <a-entity 
-                text="value: Mueve el dispositivo lentamente para buscar cims; color: yellow; align: center; width: 3;"
+                text="value: Mueve el dispositivo para ver los marcadores; color: yellow; align: center; width: 3;"
                 position="0 0.5 -1"
                 id="instruction-message">
             </a-entity>
@@ -83,30 +83,22 @@
             <a-sphere color="green" radius="2" opacity="0.8"></a-sphere>
             <a-text value="Marcador de prueba (20m)" align="center" color="white" position="0 2.5 0" scale="2 2 2"></a-text>
         </a-entity>
+        
+        <!-- Marcadores adicionales para simular cims -->
+        <a-entity position="10 2 -30">
+            <a-sphere color="yellow" radius="2.5" opacity="0.8"></a-sphere>
+            <a-text value="Santa Brígida (simulado)" align="center" color="white" position="0 3 0" scale="2.5 2.5 2.5"></a-text>
+            <a-text value="464m" align="center" color="lightgreen" position="0 2 0" scale="2 2 2"></a-text>
+        </a-entity>
+        
+        <a-entity position="-10 3 -40">
+            <a-sphere color="purple" radius="3" opacity="0.8"></a-sphere>
+            <a-text value="Puigsacalm (simulado)" align="center" color="white" position="0 3.5 0" scale="3 3 3"></a-text>
+            <a-text value="1515m" align="center" color="lightgreen" position="0 2.5 0" scale="2.5 2.5 2.5"></a-text>
+        </a-entity>
     </a-scene>
     
     <script>
-        // Actualizar mensaje de estado cuando se obtiene la posición GPS
-        document.addEventListener('gps-camera-update-position', e => {
-            const { latitude, longitude, accuracy } = e.detail.position;
-            const statusEl = document.getElementById('status-message');
-            if (statusEl) {
-                statusEl.setAttribute(
-                    'text',
-                    `value: Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}, Precisión: ${accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
-                );
-            }
-            
-            // Cambiar el mensaje de instrucciones después de obtener la posición
-            const instructionEl = document.getElementById('instruction-message');
-            if (instructionEl) {
-                instructionEl.setAttribute(
-                    'text',
-                    `value: Posición GPS obtenida. Busca los marcadores a tu alrededor.; color: green; align: center; width: 3;`
-                );
-            }
-        });
-        
         // Ocultar el loader cuando la escena esté lista
         document.querySelector('a-scene').addEventListener('loaded', () => {
             document.querySelector('.arjs-loader').style.display = 'none';

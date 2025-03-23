@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR GPS - Muntanya100</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        .arjs-loader {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .arjs-loader div {
+            text-align: center;
+            font-size: 1.25em;
+            color: white;
+        }
+        #exit-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            padding: 10px 15px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #debug-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 9999;
+            max-height: 30vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <div class="arjs-loader">
+        <div>Cargando experiencia AR con GPS, por favor espera...</div>
+    </div>
+    
+    <button id="exit-button" onclick="window.location.href='/Muntanya100/'">❌ Sortir</button>
+    
+    <div id="debug-panel">Iniciando AR con GPS...</div>
+    
+    <a-scene
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true;"
+        loading-screen="enabled: false">
+        
+        <a-camera gps-camera="minDistance: 1; maxDistance: 1000000; gpsMinAccuracy: 1000;" rotation-reader>
+            <!-- Mensaje de estado -->
+            <a-entity 
+                text="value: Buscando posición GPS...; color: white; align: center; width: 3;"
+                position="0 -0.5 -1"
+                id="status-message">
+            </a-entity>
+            
+            <!-- Mensaje de instrucciones -->
+            <a-entity 
+                text="value: Buscando cims cercanos...; color: yellow; align: center; width: 3;"
+                position="0 0.5 -1"
+                id="instruction-message">
+            </a-entity>
+        </a-camera>
+    </a-scene>
+    
+    <script>
+        const debugPanel = document.getElementById('debug-panel');
+        const loader = document.querySelector('.arjs-loader');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugPanel.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+        }
+        
+        // Cargar cims desde localStorage
+        let cims = [];
+        try {
+            const cimsData = localStorage.getItem('ar-cims');
+            if (cimsData) {
+                cims = JSON.parse(cimsData);
+                log(`Cargados ${cims.length} cims desde localStorage`);
+            } else {
+                log('No se encontraron datos de cims en localStorage');
+            }
+        } catch (error) {
+            log(`Error al cargar cims: ${error.message}`);
+        }
+        
+        // Verificar permisos de geolocalización
+        if ('geolocation' in navigator) {
+            log('Geolocalización disponible');
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    log(`Posición obtenida: ${position.coords.latitude}, ${position.coords.longitude} (precisión: ${position.coords.accuracy}m)`);
+                    
+                    // Crear entidades para los cims
+                    if (cims.length > 0) {
+                        const scene = document.querySelector('a-scene');
+                        
+                        cims.forEach(cim => {
+                            log(`Creando entidad para ${cim.nom} en ${cim.latitude}, ${cim.longitude}`);
+                            
+                            // Calcular distancia aproximada
+                            const R = 6371; // Radio de la Tierra en km
+                            const dLat = (cim.latitude - position.coords.latitude) * Math.PI / 180;
+                            const dLon = (cim.longitude - position.coords.longitude) * Math.PI / 180;
+                            const a = 
+                                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                                Math.cos(position.coords.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
+                                Math.sin(dLon/2) * Math.sin(dLon/2);
+                            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                            const distance = R * c;
+                            
+                            log(`Distancia a ${cim.nom}: ${distance.toFixed(2)} km`);
+                            
+                            // Crear entidad GPS
+                            const entity = document.createElement('a-entity');
+                            entity.setAttribute('gps-entity-place', `latitude: ${cim.latitude}; longitude: ${cim.longitude}`);
+                            
+                            // Añadir esfera grande para mayor visibilidad
+                            const sphere = document.createElement('a-sphere');
+                            sphere.setAttribute('radius', '500');
+                            sphere.setAttribute('color', 'red');
+                            sphere.setAttribute('opacity', '0.6');
+                            sphere.setAttribute('position', '0 500 0');
+                            entity.appendChild(sphere);
+                            
+                            // Añadir texto con el nombre
+                            const text = document.createElement('a-text');
+                            text.setAttribute('value', cim.nom);
+                            text.setAttribute('look-at', '[gps-camera]');
+                            text.setAttribute('scale', '500 500 500');
+                            text.setAttribute('align', 'center');
+                            text.setAttribute('color', 'white');
+                            text.setAttribute('position', '0 1000 0');
+                            entity.appendChild(text);
+                            
+                            // Añadir texto con altitud
+                            const altText = document.createElement('a-text');
+                            altText.setAttribute('value', `${cim.altitud}m`);
+                            altText.setAttribute('look-at', '[gps-camera]');
+                            altText.setAttribute('scale', '350 350 350');
+                            altText.setAttribute('align', 'center');
+                            altText.setAttribute('color', 'yellow');
+                            altText.setAttribute('position', '0 800 0');
+                            entity.appendChild(altText);
+                            
+                            // Añadir texto con distancia
+                            const distText = document.createElement('a-text');
+                            distText.setAttribute('value', `${distance.toFixed(1)} km`);
+                            distText.setAttribute('look-at', '[gps-camera]');
+                            distText.setAttribute('scale', '350 350 350');
+                            distText.setAttribute('align', 'center');
+                            distText.setAttribute('color', 'lightgreen');
+                            distText.setAttribute('position', '0 600 0');
+                            entity.appendChild(distText);
+                            
+                            scene.appendChild(entity);
+                        });
+                        
+                        // Actualizar mensaje de instrucciones
+                        const instructionEl = document.getElementById('instruction-message');
+                        if (instructionEl) {
+                            instructionEl.setAttribute(
+                                'text',
+                                `value: ${cims.length} cims cargados. Mueve el dispositivo lentamente.; color: green; align: center; width: 3;`
+                            );
+                        }
+                    } else {
+                        log('No hay cims para mostrar');
+                        
+                        // Actualizar mensaje de instrucciones
+                        const instructionEl = document.getElementById('instruction-message');
+                        if (instructionEl) {
+                            instructionEl.setAttribute(
+                                'text',
+                                `value: No se encontraron cims para mostrar.; color: red; align: center; width: 3;`
+                            );
+                        }
+                    }
+                },
+                error => {
+                    log(`Error de geolocalización: ${error.message} (código: ${error.code})`);
+                    
+                    // Actualizar mensaje de instrucciones
+                    const instructionEl = document.getElementById('instruction-message');
+                    if (instructionEl) {
+                        instructionEl.setAttribute(
+                            'text',
+                            `value: Error de geolocalización: ${error.message}; color: red; align: center; width: 3;`
+                        );
+                    }
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+            
+            // Monitorear cambios en la posición
+            const watchId = navigator.geolocation.watchPosition(
+                position => {
+                    const statusEl = document.getElementById('status-message');
+                    if (statusEl) {
+                        statusEl.setAttribute(
+                            'text',
+                            `value: Lat: ${position.coords.latitude.toFixed(6)}, Lon: ${position.coords.longitude.toFixed(6)}, Precisión: ${position.coords.accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
+                        );
+                    }
+                    
+                    log(`Posición actualizada: ${position.coords.latitude}, ${position.coords.longitude} (precisión: ${position.coords.accuracy}m)`);
+                },
+                error => {
+                    log(`Error en watchPosition: ${error.message}`);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        } else {
+            log('Geolocalización NO disponible en este dispositivo/navegador');
+            
+            // Actualizar mensaje de instrucciones
+            const instructionEl = document.getElementById('instruction-message');
+            if (instructionEl) {
+                instructionEl.setAttribute(
+                    'text',
+                    `value: Geolocalización no disponible en este dispositivo.; color: red; align: center; width: 3;`
+                );
+            }
+        }
+        
+        // Ocultar el loader cuando la escena esté lista
+        document.querySelector('a-scene').addEventListener('loaded', () => {
+            log('Escena AR cargada');
+            loader.style.display = 'none';
+        });
+        
+        // Monitorear eventos de AR.js
+        document.addEventListener('gps-camera-update-position', e => {
+            const { latitude, longitude, accuracy } = e.detail.position;
+            log(`AR.js posición actualizada: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (precisión: ${accuracy.toFixed(2)}m)`);
+        });
+    </script>
+</body>
+</html>
+
