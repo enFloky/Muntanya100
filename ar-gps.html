@@ -70,6 +70,17 @@
             color: white;
             cursor: pointer;
         }
+        /* Añadir selector de modo */
+        #mode-selector {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 9999;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body style="margin: 0; overflow: hidden;">
@@ -89,16 +100,26 @@
         <button class="control-button" onclick="recreateEntities()">Recrear Marcadores</button>
     </div>
     
+    <div id="mode-selector">
+        <div>Modo:</div>
+        <button class="control-button" onclick="switchToLocationMode()">Ubicación Real</button>
+        <button class="control-button" onclick="switchToDirectionMode()">Dirección Visual</button>
+    </div>
+    
     <div id="debug-panel">Iniciando AR con GPS...</div>
     
     <a-scene
         embedded
-        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; gpsMinDistance: 5; gpsTimeInterval: 0;"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
         vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true; antialias: true; precision: mediump;"
+        renderer="logarithmicDepthBuffer: true; antialias: true;"
         loading-screen="enabled: false">
         
-        <a-camera gps-projected-camera="gpsMinDistance: 5; simulateLatitude: 42.0284; simulateLongitude: 2.6166;" rotation-reader>
+        <a-assets>
+            <a-asset-item id="mountain-obj" src="https://cdn.glitch.global/3075893e-b6f8-4f76-9d19-d9c12c4e19c6/mountain.obj?v=1648123825941"></a-asset-item>
+        </a-assets>
+        
+        <a-camera id="camera" position="0 1.6 0" look-controls="pointerLockEnabled: false">
             <!-- Mensaje de estado -->
             <a-entity 
                 text="value: Buscando posición GPS...; color: white; align: center; width: 3;"
@@ -113,16 +134,22 @@
                 id="instruction-message">
             </a-entity>
         </a-camera>
+        
+        <!-- Contenedor para los marcadores -->
+        <a-entity id="markers-container"></a-entity>
     </a-scene>
     
     <script>
         const debugPanel = document.getElementById('debug-panel');
         const loader = document.querySelector('.arjs-loader');
+        const markersContainer = document.getElementById('markers-container');
         let currentScale = 1;
         let currentHeight = 0;
         let entitiesVisible = true;
         let cims = [];
         let entitiesCreated = false;
+        let currentMode = 'location'; // 'location' o 'direction'
+        let userPosition = null;
         
         function log(message) {
             const timestamp = new Date().toLocaleTimeString();
@@ -135,21 +162,9 @@
             currentScale *= factor;
             log(`Ajustando escala a: ${currentScale.toFixed(2)}`);
             
-            document.querySelectorAll('a-sphere').forEach(sphere => {
-                const currentRadius = parseFloat(sphere.getAttribute('radius'));
-                sphere.setAttribute('radius', currentRadius * factor);
-            });
-            
-            document.querySelectorAll('a-text').forEach(text => {
-                const currentScale = text.getAttribute('scale').split(' ').map(parseFloat);
-                text.setAttribute('scale', `${currentScale[0] * factor} ${currentScale[1] * factor} ${currentScale[2] * factor}`);
-            });
-            
-            document.querySelectorAll('a-cylinder').forEach(cylinder => {
-                const currentRadius = parseFloat(cylinder.getAttribute('radius'));
-                const currentHeight = parseFloat(cylinder.getAttribute('height'));
-                cylinder.setAttribute('radius', currentRadius * factor);
-                cylinder.setAttribute('height', currentHeight * factor);
+            document.querySelectorAll('.marker-entity').forEach(entity => {
+                const currentScale = entity.getAttribute('scale').split(' ').map(parseFloat);
+                entity.setAttribute('scale', `${currentScale[0] * factor} ${currentScale[1] * factor} ${currentScale[2] * factor}`);
             });
         }
         
@@ -158,16 +173,9 @@
             currentHeight += delta;
             log(`Ajustando altura a: ${currentHeight}`);
             
-            document.querySelectorAll('a-entity[gps-projected-entity-place]').forEach(entity => {
-                const children = entity.children;
-                for (let i = 0; i < children.length; i++) {
-                    const child = children[i];
-                    const currentPosition = child.getAttribute('position').split(' ');
-                    const x = parseFloat(currentPosition[0]);
-                    const y = parseFloat(currentPosition[1]) + delta;
-                    const z = parseFloat(currentPosition[2]);
-                    child.setAttribute('position', `${x} ${y} ${z}`);
-                }
+            document.querySelectorAll('.marker-entity').forEach(entity => {
+                const currentPosition = entity.getAttribute('position').split(' ').map(parseFloat);
+                entity.setAttribute('position', `${currentPosition[0]} ${currentPosition[1] + delta} ${currentPosition[2]}`);
             });
         }
         
@@ -176,7 +184,7 @@
             entitiesVisible = !entitiesVisible;
             log(`Marcadores ${entitiesVisible ? 'visibles' : 'ocultos'}`);
             
-            document.querySelectorAll('a-entity[gps-projected-entity-place]').forEach(entity => {
+            document.querySelectorAll('.marker-entity').forEach(entity => {
                 entity.setAttribute('visible', entitiesVisible);
             });
         }
@@ -186,120 +194,265 @@
             log('Recreando marcadores...');
             
             // Eliminar entidades existentes
-            document.querySelectorAll('a-entity[gps-projected-entity-place]').forEach(entity => {
-                entity.parentNode.removeChild(entity);
-            });
+            while (markersContainer.firstChild) {
+                markersContainer.removeChild(markersContainer.firstChild);
+            }
             
             // Recrear entidades
-            createEntities();
+            if (currentMode === 'location') {
+                createLocationBasedEntities();
+            } else {
+                createDirectionBasedEntities();
+            }
         }
         
-        // Función para crear entidades
-        function createEntities() {
+        // Cambiar al modo de ubicación real
+        function switchToLocationMode() {
+            if (currentMode !== 'location') {
+                currentMode = 'location';
+                log('Cambiando a modo de ubicación real');
+                recreateEntities();
+            }
+        }
+        
+        // Cambiar al modo de dirección visual
+        function switchToDirectionMode() {
+            if (currentMode !== 'direction') {
+                currentMode = 'direction';
+                log('Cambiando a modo de dirección visual');
+                recreateEntities();
+            }
+        }
+        
+        // Función para crear entidades basadas en ubicación GPS
+        function createLocationBasedEntities() {
+            if (cims.length === 0 || !userPosition) {
+                log('No hay cims para mostrar o posición de usuario no disponible');
+                return;
+            }
+            
+            log(`Creando ${cims.length} marcadores basados en ubicación...`);
+            
+            cims.forEach(cim => {
+                log(`Creando entidad para ${cim.nom} en ${cim.latitude}, ${cim.longitude}`);
+                
+                // Calcular distancia aproximada
+                const R = 6371; // Radio de la Tierra en km
+                const dLat = (cim.latitude - userPosition.latitude) * Math.PI / 180;
+                const dLon = (cim.longitude - userPosition.longitude) * Math.PI / 180;
+                const a = 
+                    Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(userPosition.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                const distance = R * c;
+                
+                log(`Distancia a ${cim.nom}: ${distance.toFixed(2)} km`);
+                
+                // Calcular dirección (bearing) desde la posición del usuario hasta el cim
+                const y = Math.sin(dLon) * Math.cos(cim.latitude * Math.PI / 180);
+                const x = Math.cos(userPosition.latitude * Math.PI / 180) * Math.sin(cim.latitude * Math.PI / 180) -
+                          Math.sin(userPosition.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * Math.cos(dLon);
+                const bearing = Math.atan2(y, x) * 180 / Math.PI;
+                const bearingNormalized = (bearing + 360) % 360;
+                
+                log(`Dirección a ${cim.nom}: ${bearingNormalized.toFixed(2)}°`);
+                
+                // Crear entidad para el marcador
+                const entity = document.createElement('a-entity');
+                entity.setAttribute('class', 'marker-entity');
+                entity.setAttribute('id', `cim-${cim.id}`);
+                entity.setAttribute('data-name', cim.nom);
+                entity.setAttribute('data-distance', distance.toFixed(1));
+                entity.setAttribute('data-altitude', cim.altitud);
+                entity.setAttribute('data-bearing', bearingNormalized.toFixed(1));
+                
+                // Posicionar el marcador en la dirección correcta
+                // Convertir bearing a radianes
+                const bearingRad = bearingNormalized * Math.PI / 180;
+                
+                // Calcular posición en coordenadas cartesianas
+                // Usamos una distancia visual fija para todos los marcadores (ajustada por la distancia real)
+                const visualDistance = Math.min(100, 20 + 80 * Math.min(1, distance / 50));
+                const x = -Math.sin(bearingRad) * visualDistance;
+                const z = -Math.cos(bearingRad) * visualDistance;
+                const y = 0; // Altura base
+                
+                entity.setAttribute('position', `${x} ${y} ${z}`);
+                entity.setAttribute('scale', '1 1 1');
+                
+                // Añadir marcador visible (esfera)
+                const marker = document.createElement('a-sphere');
+                marker.setAttribute('radius', '2');
+                marker.setAttribute('color', 'red');
+                marker.setAttribute('opacity', '0.8');
+                marker.setAttribute('position', '0 0 0');
+                marker.setAttribute('emissive', 'red');
+                marker.setAttribute('emissiveIntensity', '0.5');
+                entity.appendChild(marker);
+                
+                // Añadir cilindro para conectar con el texto
+                const cylinder = document.createElement('a-cylinder');
+                cylinder.setAttribute('radius', '0.5');
+                cylinder.setAttribute('height', '5');
+                cylinder.setAttribute('color', 'yellow');
+                cylinder.setAttribute('opacity', '0.5');
+                cylinder.setAttribute('position', '0 2.5 0');
+                entity.appendChild(cylinder);
+                
+                // Añadir texto con el nombre
+                const text = document.createElement('a-text');
+                text.setAttribute('value', cim.nom);
+                text.setAttribute('align', 'center');
+                text.setAttribute('color', 'white');
+                text.setAttribute('position', '0 6 0');
+                text.setAttribute('scale', '2 2 2');
+                text.setAttribute('look-at', '#camera');
+                entity.appendChild(text);
+                
+                // Añadir texto con altitud
+                const altText = document.createElement('a-text');
+                altText.setAttribute('value', `${cim.altitud}m`);
+                altText.setAttribute('align', 'center');
+                altText.setAttribute('color', 'yellow');
+                altText.setAttribute('position', '0 5 0');
+                altText.setAttribute('scale', '1.5 1.5 1.5');
+                altText.setAttribute('look-at', '#camera');
+                entity.appendChild(altText);
+                
+                // Añadir texto con distancia
+                const distText = document.createElement('a-text');
+                distText.setAttribute('value', `${distance.toFixed(1)} km`);
+                distText.setAttribute('align', 'center');
+                distText.setAttribute('color', 'lightgreen');
+                distText.setAttribute('position', '0 4 0');
+                distText.setAttribute('scale', '1.5 1.5 1.5');
+                distText.setAttribute('look-at', '#camera');
+                entity.appendChild(distText);
+                
+                // Añadir la entidad al contenedor
+                markersContainer.appendChild(entity);
+            });
+            
+            entitiesCreated = true;
+            
+            // Actualizar mensaje de instrucciones
+            const instructionEl = document.getElementById('instruction-message');
+            if (instructionEl) {
+                instructionEl.setAttribute(
+                    'text',
+                    `value: ${cims.length} cims cargados. Usa los controles para ajustar.; color: green; align: center; width: 3;`
+                );
+            }
+        }
+        
+        // Función para crear entidades basadas en dirección visual
+        function createDirectionBasedEntities() {
             if (cims.length === 0) {
                 log('No hay cims para mostrar');
                 return;
             }
             
-            log(`Creando ${cims.length} marcadores...`);
-            const scene = document.querySelector('a-scene');
+            log(`Creando ${cims.length} marcadores basados en dirección visual...`);
             
-            // Obtener posición actual
-            navigator.geolocation.getCurrentPosition(
-                position => {
-                    const userLat = position.coords.latitude;
-                    const userLon = position.coords.longitude;
-                    
-                    cims.forEach(cim => {
-                        log(`Creando entidad para ${cim.nom} en ${cim.latitude}, ${cim.longitude}`);
-                        
-                        // Calcular distancia aproximada
-                        const R = 6371; // Radio de la Tierra en km
-                        const dLat = (cim.latitude - userLat) * Math.PI / 180;
-                        const dLon = (cim.longitude - userLon) * Math.PI / 180;
-                        const a = 
-                            Math.sin(dLat/2) * Math.sin(dLat/2) +
-                            Math.cos(userLat * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
-                            Math.sin(dLon/2) * Math.sin(dLon/2);
-                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                        const distance = R * c;
-                        
-                        log(`Distancia a ${cim.nom}: ${distance.toFixed(2)} km`);
-                        
-                        // Crear entidad GPS con el nuevo componente gps-projected-entity-place
-                        const entity = document.createElement('a-entity');
-                        entity.setAttribute('gps-projected-entity-place', `latitude: ${cim.latitude}; longitude: ${cim.longitude}`);
-                        entity.setAttribute('id', `cim-${cim.id}`);
-                        entity.setAttribute('scale', '1 1 1');
-                        
-                        // Añadir marcador grande y brillante
-                        const marker = document.createElement('a-sphere');
-                        marker.setAttribute('radius', '100'); // Tamaño más grande para mejor visibilidad
-                        marker.setAttribute('color', 'red');
-                        marker.setAttribute('opacity', '0.8');
-                        marker.setAttribute('position', '0 0 0'); // A nivel del suelo
-                        marker.setAttribute('emissive', 'red');
-                        marker.setAttribute('emissiveIntensity', '0.5');
-                        entity.appendChild(marker);
-                        
-                        // Añadir cilindro para conectar con el texto
-                        const cylinder = document.createElement('a-cylinder');
-                        cylinder.setAttribute('radius', '40');
-                        cylinder.setAttribute('height', '200');
-                        cylinder.setAttribute('color', 'yellow');
-                        cylinder.setAttribute('opacity', '0.5');
-                        cylinder.setAttribute('position', '0 100 0');
-                        entity.appendChild(cylinder);
-                        
-                        // Añadir texto con el nombre
-                        const text = document.createElement('a-text');
-                        text.setAttribute('value', cim.nom);
-                        text.setAttribute('look-at', '[gps-projected-camera]');
-                        text.setAttribute('scale', '100 100 100');
-                        text.setAttribute('align', 'center');
-                        text.setAttribute('color', 'white');
-                        text.setAttribute('position', '0 240 0');
-                        entity.appendChild(text);
-                        
-                        // Añadir texto con altitud
-                        const altText = document.createElement('a-text');
-                        altText.setAttribute('value', `${cim.altitud}m`);
-                        altText.setAttribute('look-at', '[gps-projected-camera]');
-                        altText.setAttribute('scale', '80 80 80');
-                        altText.setAttribute('align', 'center');
-                        altText.setAttribute('color', 'yellow');
-                        altText.setAttribute('position', '0 200 0');
-                        entity.appendChild(altText);
-                        
-                        // Añadir texto con distancia
-                        const distText = document.createElement('a-text');
-                        distText.setAttribute('value', `${distance.toFixed(1)} km`);
-                        distText.setAttribute('look-at', '[gps-projected-camera]');
-                        distText.setAttribute('scale', '80 80 80');
-                        distText.setAttribute('align', 'center');
-                        distText.setAttribute('color', 'lightgreen');
-                        distText.setAttribute('position', '0 160 0');
-                        entity.appendChild(distText);
-                        
-                        scene.appendChild(entity);
-                    });
-                    
-                    entitiesCreated = true;
-                    
-                    // Actualizar mensaje de instrucciones
-                    const instructionEl = document.getElementById('instruction-message');
-                    if (instructionEl) {
-                        instructionEl.setAttribute(
-                            'text',
-                            `value: ${cims.length} cims cargados. Usa los controles para ajustar.; color: green; align: center; width: 3;`
-                        );
-                    }
-                },
-                error => {
-                    log(`Error obteniendo posición: ${error.message}`);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
+            // Posiciones fijas para demostración
+            const positions = [
+                { x: 0, y: 0, z: -50 },
+                { x: 30, y: 5, z: -40 },
+                { x: -30, y: 10, z: -60 },
+                { x: 50, y: 15, z: -70 }
+            ];
+            
+            cims.forEach((cim, index) => {
+                log(`Creando entidad para ${cim.nom} en posición visual`);
+                
+                // Usar posición fija para demostración
+                const pos = positions[index % positions.length];
+                
+                // Calcular distancia aproximada si hay posición de usuario
+                let distance = "?";
+                if (userPosition) {
+                    const R = 6371; // Radio de la Tierra en km
+                    const dLat = (cim.latitude - userPosition.latitude) * Math.PI / 180;
+                    const dLon = (cim.longitude - userPosition.longitude) * Math.PI / 180;
+                    const a = 
+                        Math.sin(dLat/2) * Math.sin(dLat/2) +
+                        Math.cos(userPosition.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
+                        Math.sin(dLon/2) * Math.sin(dLon/2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                    distance = (R * c).toFixed(1);
+                }
+                
+                // Crear entidad para el marcador
+                const entity = document.createElement('a-entity');
+                entity.setAttribute('class', 'marker-entity');
+                entity.setAttribute('id', `cim-${cim.id}`);
+                entity.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
+                entity.setAttribute('scale', '1 1 1');
+                
+                // Añadir marcador visible (esfera)
+                const marker = document.createElement('a-sphere');
+                marker.setAttribute('radius', '2');
+                marker.setAttribute('color', 'red');
+                marker.setAttribute('opacity', '0.8');
+                marker.setAttribute('position', '0 0 0');
+                marker.setAttribute('emissive', 'red');
+                marker.setAttribute('emissiveIntensity', '0.5');
+                entity.appendChild(marker);
+                
+                // Añadir cilindro para conectar con el texto
+                const cylinder = document.createElement('a-cylinder');
+                cylinder.setAttribute('radius', '0.5');
+                cylinder.setAttribute('height', '5');
+                cylinder.setAttribute('color', 'yellow');
+                cylinder.setAttribute('opacity', '0.5');
+                cylinder.setAttribute('position', '0 2.5 0');
+                entity.appendChild(cylinder);
+                
+                // Añadir texto con el nombre
+                const text = document.createElement('a-text');
+                text.setAttribute('value', cim.nom);
+                text.setAttribute('align', 'center');
+                text.setAttribute('color', 'white');
+                text.setAttribute('position', '0 6 0');
+                text.setAttribute('scale', '2 2 2');
+                text.setAttribute('look-at', '#camera');
+                entity.appendChild(text);
+                
+                // Añadir texto con altitud
+                const altText = document.createElement('a-text');
+                altText.setAttribute('value', `${cim.altitud}m`);
+                altText.setAttribute('align', 'center');
+                altText.setAttribute('color', 'yellow');
+                altText.setAttribute('position', '0 5 0');
+                altText.setAttribute('scale', '1.5 1.5 1.5');
+                altText.setAttribute('look-at', '#camera');
+                entity.appendChild(altText);
+                
+                // Añadir texto con distancia
+                const distText = document.createElement('a-text');
+                distText.setAttribute('value', `${distance} km`);
+                distText.setAttribute('align', 'center');
+                distText.setAttribute('color', 'lightgreen');
+                distText.setAttribute('position', '0 4 0');
+                distText.setAttribute('scale', '1.5 1.5 1.5');
+                distText.setAttribute('look-at', '#camera');
+                entity.appendChild(distText);
+                
+                // Añadir la entidad al contenedor
+                markersContainer.appendChild(entity);
+            });
+            
+            entitiesCreated = true;
+            
+            // Actualizar mensaje de instrucciones
+            const instructionEl = document.getElementById('instruction-message');
+            if (instructionEl) {
+                instructionEl.setAttribute(
+                    'text',
+                    `value: Modo de demostración. Usa los controles para ajustar.; color: green; align: center; width: 3;`
+                );
+            }
         }
         
         // Cargar cims desde localStorage
@@ -363,20 +516,30 @@
             // Solicitar permisos de geolocalización
             navigator.geolocation.getCurrentPosition(
                 position => {
-                    log(`Posición obtenida: ${position.coords.latitude}, ${position.coords.longitude} (precisión: ${position.coords.accuracy}m)`);
+                    userPosition = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+                    
+                    log(`Posición obtenida: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
                     
                     // Actualizar mensaje de estado
                     const statusEl = document.getElementById('status-message');
                     if (statusEl) {
                         statusEl.setAttribute(
                             'text',
-                            `value: Lat: ${position.coords.latitude.toFixed(6)}, Lon: ${position.coords.longitude.toFixed(6)}; color: white; align: center; width: 3;`
+                            `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}; color: white; align: center; width: 3;`
                         );
                     }
                     
                     // Crear entidades para los cims
                     if (!entitiesCreated) {
-                        createEntities();
+                        if (currentMode === 'location') {
+                            createLocationBasedEntities();
+                        } else {
+                            createDirectionBasedEntities();
+                        }
                     }
                 },
                 error => {
@@ -390,6 +553,12 @@
                             `value: Error de geolocalización: ${error.message}; color: red; align: center; width: 3;`
                         );
                     }
+                    
+                    // Crear entidades en modo dirección visual si hay error de geolocalización
+                    if (!entitiesCreated) {
+                        currentMode = 'direction';
+                        createDirectionBasedEntities();
+                    }
                 },
                 { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             );
@@ -397,43 +566,55 @@
             // Monitorear cambios en la posición
             const watchId = navigator.geolocation.watchPosition(
                 position => {
+                    userPosition = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+                    
                     const statusEl = document.getElementById('status-message');
                     if (statusEl) {
                         statusEl.setAttribute(
                             'text',
-                            `value: Lat: ${position.coords.latitude.toFixed(6)}, Lon: ${position.coords.longitude.toFixed(6)}, Precisión: ${position.coords.accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
+                            `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}, Precisión: ${userPosition.accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
                         );
                     }
                     
-                    log(`Posición actualizada: ${position.coords.latitude}, ${position.coords.longitude} (precisión: ${position.coords.accuracy}m)`);
+                    log(`Posición actualizada: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
                     
                     // Crear entidades si aún no se han creado
                     if (!entitiesCreated) {
-                        createEntities();
+                        if (currentMode === 'location') {
+                            createLocationBasedEntities();
+                        } else {
+                            createDirectionBasedEntities();
+                        }
                     }
                     
-                    // Actualizar distancias a los cims
-                    cims.forEach(cim => {
-                        // Calcular distancia aproximada
-                        const R = 6371; // Radio de la Tierra en km
-                        const dLat = (cim.latitude - position.coords.latitude) * Math.PI / 180;
-                        const dLon = (cim.longitude - position.coords.longitude) * Math.PI / 180;
-                        const a = 
-                            Math.sin(dLat/2) * Math.sin(dLat/2) +
-                            Math.cos(position.coords.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
-                            Math.sin(dLon/2) * Math.sin(dLon/2);
-                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                        const distance = R * c;
-                        
-                        // Actualizar texto de distancia
-                        const entity = document.getElementById(`cim-${cim.id}`);
-                        if (entity) {
-                            const distTexts = entity.querySelectorAll('a-text');
-                            if (distTexts.length >= 3) {
-                                distTexts[2].setAttribute('value', `${distance.toFixed(1)} km`);
+                    // Actualizar distancias a los cims si estamos en modo dirección visual
+                    if (currentMode === 'direction') {
+                        cims.forEach(cim => {
+                            // Calcular distancia aproximada
+                            const R = 6371; // Radio de la Tierra en km
+                            const dLat = (cim.latitude - userPosition.latitude) * Math.PI / 180;
+                            const dLon = (cim.longitude - userPosition.longitude) * Math.PI / 180;
+                            const a = 
+                                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                                Math.cos(userPosition.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
+                                Math.sin(dLon/2) * Math.sin(dLon/2);
+                            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                            const distance = R * c;
+                            
+                            // Actualizar texto de distancia
+                            const entity = document.getElementById(`cim-${cim.id}`);
+                            if (entity) {
+                                const distTexts = entity.querySelectorAll('a-text');
+                                if (distTexts.length >= 3) {
+                                    distTexts[2].setAttribute('value', `${distance.toFixed(1)} km`);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 },
                 error => {
                     log(`Error en watchPosition: ${error.message}`);
@@ -451,6 +632,10 @@
                     `value: Geolocalización no disponible en este dispositivo.; color: red; align: center; width: 3;`
                 );
             }
+            
+            // Crear entidades en modo dirección visual si no hay geolocalización
+            currentMode = 'direction';
+            createDirectionBasedEntities();
         }
         
         // Ocultar el loader cuando la escena esté lista
@@ -462,20 +647,14 @@
             setTimeout(() => {
                 if (!entitiesCreated) {
                     log('Creando entidades después de cargar la escena...');
-                    createEntities();
+                    if (currentMode === 'location' && userPosition) {
+                        createLocationBasedEntities();
+                    } else {
+                        currentMode = 'direction';
+                        createDirectionBasedEntities();
+                    }
                 }
             }, 2000);
-        });
-        
-        // Monitorear eventos de AR.js
-        document.addEventListener('gps-camera-update-position', e => {
-            const { latitude, longitude, accuracy } = e.detail.position;
-            log(`AR.js posición actualizada: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (precisión: ${accuracy.toFixed(2)}m)`);
-            
-            // Crear entidades si aún no se han creado
-            if (!entitiesCreated) {
-                createEntities();
-            }
         });
         
         // Manejar eventos de permisos de cámara
@@ -485,6 +664,8 @@
         
         document.addEventListener('camera-error', (error) => {
             log(`Error de cámara: ${error}`);
+        });  (error) => {
+            log(`Error de cámara: ${error}`);
         });
         
         // Recrear entidades cuando se da permiso a la cámara
@@ -492,7 +673,12 @@
             log('Cámara iniciada - recreando entidades');
             setTimeout(() => {
                 if (!entitiesCreated) {
-                    createEntities();
+                    if (currentMode === 'location' && userPosition) {
+                        createLocationBasedEntities();
+                    } else {
+                        currentMode = 'direction';
+                        createDirectionBasedEntities();
+                    }
                 }
             }, 1000);
         });
