@@ -81,6 +81,31 @@
             padding: 10px;
             border-radius: 5px;
         }
+        /* Mensaje de error */
+        #error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 10000;
+            max-width: 80%;
+            text-align: center;
+            display: none;
+        }
+        /* Botón de reintentar */
+        #retry-button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: white;
+            color: black;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body style="margin: 0; overflow: hidden;">
@@ -108,16 +133,18 @@
     
     <div id="debug-panel">Iniciando AR con GPS...</div>
     
+    <div id="error-message">
+        <div>Error al iniciar la experiencia AR</div>
+        <div id="error-details">Detalles del error</div>
+        <button id="retry-button" onclick="retryInitialization()">Reintentar</button>
+    </div>
+    
     <a-scene
         embedded
         arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
         vr-mode-ui="enabled: false"
         renderer="logarithmicDepthBuffer: true; antialias: true;"
         loading-screen="enabled: false">
-        
-        <a-assets>
-            <a-asset-item id="mountain-obj" src="https://cdn.glitch.global/3075893e-b6f8-4f76-9d19-d9c12c4e19c6/mountain.obj?v=1648123825941"></a-asset-item>
-        </a-assets>
         
         <a-camera id="camera" position="0 1.6 0" look-controls="pointerLockEnabled: false">
             <!-- Mensaje de estado -->
@@ -143,18 +170,45 @@
         const debugPanel = document.getElementById('debug-panel');
         const loader = document.querySelector('.arjs-loader');
         const markersContainer = document.getElementById('markers-container');
+        const errorMessage = document.getElementById('error-message');
+        const errorDetails = document.getElementById('error-details');
         let currentScale = 1;
         let currentHeight = 0;
         let entitiesVisible = true;
         let cims = [];
         let entitiesCreated = false;
-        let currentMode = 'location'; // 'location' o 'direction'
+        let currentMode = 'direction'; // Cambiado a 'direction' por defecto para evitar problemas de GPS
         let userPosition = null;
+        let initializationTimeout;
         
         function log(message) {
             const timestamp = new Date().toLocaleTimeString();
             debugPanel.innerHTML += `<div>[${timestamp}] ${message}</div>`;
             debugPanel.scrollTop = debugPanel.scrollHeight;
+            console.log(`[${timestamp}] ${message}`); // También log a la consola para depuración
+        }
+        
+        function showError(message) {
+            errorDetails.textContent = message;
+            errorMessage.style.display = 'block';
+            loader.style.display = 'none';
+            log(`ERROR: ${message}`);
+        }
+        
+        function retryInitialization() {
+            errorMessage.style.display = 'none';
+            loader.style.display = 'flex';
+            log('Reintentando inicialización...');
+            
+            // Limpiar cualquier timeout existente
+            if (initializationTimeout) {
+                clearTimeout(initializationTimeout);
+            }
+            
+            // Reiniciar la inicialización
+            setTimeout(() => {
+                initializeAR();
+            }, 1000);
         }
         
         // Función para ajustar la escala de todos los marcadores
@@ -226,8 +280,14 @@
         
         // Función para crear entidades basadas en ubicación GPS
         function createLocationBasedEntities() {
-            if (cims.length === 0 || !userPosition) {
-                log('No hay cims para mostrar o posición de usuario no disponible');
+            if (cims.length === 0) {
+                log('No hay cims para mostrar');
+                return;
+            }
+            
+            if (!userPosition) {
+                log('Posición de usuario no disponible, usando modo de dirección visual');
+                createDirectionBasedEntities();
                 return;
             }
             
@@ -455,187 +515,209 @@
             }
         }
         
-        // Cargar cims desde localStorage
-        try {
-            const cimsData = localStorage.getItem('ar-cims');
-            if (cimsData) {
-                cims = JSON.parse(cimsData);
-                log(`Cargados ${cims.length} cims desde localStorage`);
-            } else {
-                log('No se encontraron datos de cims en localStorage');
+        // Inicializar la experiencia AR
+        function initializeAR() {
+            log('Inicializando experiencia AR...');
+            
+            // Establecer un timeout para detectar si la inicialización se queda colgada
+            initializationTimeout = setTimeout(() => {
+                if (!entitiesCreated) {
+                    showError('La inicialización está tardando demasiado. Intenta cambiar al modo de demostración.');
+                }
+            }, 15000); // 15 segundos
+            
+            // Cargar cims desde localStorage
+            try {
+                const cimsData = localStorage.getItem('ar-cims');
+                if (cimsData) {
+                    cims = JSON.parse(cimsData);
+                    log(`Cargados ${cims.length} cims desde localStorage`);
+                } else {
+                    log('No se encontraron datos de cims en localStorage');
+                    
+                    // Cargar cims de ejemplo si no hay datos en localStorage
+                    cims = [
+                        {
+                            "id": 1,
+                            "nom": "Santa Brígida",
+                            "latitude": 42.0284,
+                            "longitude": 2.6166,
+                            "altitud": 464,
+                            "localització": "Amer, La Selva",
+                            "descripció": "Santa Brígida és una muntanya emblemàtica del poble d'Amer, amb bones vistes i una ermita al cim."
+                        },
+                        {
+                            "id": 2,
+                            "nom": "Puigsacalm",
+                            "latitude": 42.1019,
+                            "longitude": 2.4606,
+                            "altitud": 1515,
+                            "localització": "Vall d'en Bas, Garrotxa",
+                            "descripció": "El Puigsacalm és un dels cims més emblemàtics de la Garrotxa, amb vistes panoràmiques excepcionals."
+                        },
+                        {
+                            "id": 3,
+                            "nom": "Canigó",
+                            "latitude": 42.5186,
+                            "longitude": 2.4558,
+                            "altitud": 2784,
+                            "localització": "Catalunya Nord",
+                            "descripció": "El Canigó és una muntanya mítica de la cultura catalana."
+                        },
+                        {
+                            "id": 4,
+                            "nom": "Pedraforca",
+                            "latitude": 42.2397,
+                            "longitude": 1.7062,
+                            "altitud": 2506,
+                            "localització": "Berguedà",
+                            "descripció": "El Pedraforca és una de les muntanyes més emblemàtiques de Catalunya."
+                        }
+                    ];
+                    log('Cargados cims de ejemplo');
+                }
                 
-                // Cargar cims de ejemplo si no hay datos en localStorage
-                cims = [
-                    {
-                        "id": 1,
-                        "nom": "Santa Brígida",
-                        "latitude": 42.0284,
-                        "longitude": 2.6166,
-                        "altitud": 464,
-                        "localització": "Amer, La Selva",
-                        "descripció": "Santa Brígida és una muntanya emblemàtica del poble d'Amer, amb bones vistes i una ermita al cim."
-                    },
-                    {
-                        "id": 2,
-                        "nom": "Puigsacalm",
-                        "latitude": 42.1019,
-                        "longitude": 2.4606,
-                        "altitud": 1515,
-                        "localització": "Vall d'en Bas, Garrotxa",
-                        "descripció": "El Puigsacalm és un dels cims més emblemàtics de la Garrotxa, amb vistes panoràmiques excepcionals."
-                    },
-                    {
-                        "id": 3,
-                        "nom": "Canigó",
-                        "latitude": 42.5186,
-                        "longitude": 2.4558,
-                        "altitud": 2784,
-                        "localització": "Catalunya Nord",
-                        "descripció": "El Canigó és una muntanya mítica de la cultura catalana."
-                    },
-                    {
-                        "id": 4,
-                        "nom": "Pedraforca",
-                        "latitude": 42.2397,
-                        "longitude": 1.7062,
-                        "altitud": 2506,
-                        "localització": "Berguedà",
-                        "descripció": "El Pedraforca és una de les muntanyes més emblemàtiques de Catalunya."
-                    }
-                ];
-                log('Cargados cims de ejemplo');
+                // Verificar el modo seleccionado en localStorage
+                const savedMode = localStorage.getItem('ar-mode');
+                if (savedMode && (savedMode === 'location' || savedMode === 'direction')) {
+                    currentMode = savedMode;
+                    log(`Modo cargado desde localStorage: ${currentMode}`);
+                }
+            } catch (error) {
+                log(`Error al cargar cims: ${error.message}`);
+                showError(`Error al cargar datos: ${error.message}`);
             }
-        } catch (error) {
-            log(`Error al cargar cims: ${error.message}`);
-        }
-        
-        // Verificar permisos de geolocalización
-        if ('geolocation' in navigator) {
-            log('Geolocalización disponible');
             
-            // Solicitar permisos de geolocalización
-            navigator.geolocation.getCurrentPosition(
-                position => {
-                    userPosition = {
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                        accuracy: position.coords.accuracy
-                    };
-                    
-                    log(`Posición obtenida: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
-                    
-                    // Actualizar mensaje de estado
-                    const statusEl = document.getElementById('status-message');
-                    if (statusEl) {
-                        statusEl.setAttribute(
-                            'text',
-                            `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}; color: white; align: center; width: 3;`
-                        );
-                    }
-                    
-                    // Crear entidades para los cims
-                    if (!entitiesCreated) {
-                        if (currentMode === 'location') {
-                            createLocationBasedEntities();
-                        } else {
-                            createDirectionBasedEntities();
-                        }
-                    }
-                },
-                error => {
-                    log(`Error de geolocalización: ${error.message} (código: ${error.code})`);
-                    
-                    // Actualizar mensaje de instrucciones
-                    const instructionEl = document.getElementById('instruction-message');
-                    if (instructionEl) {
-                        instructionEl.setAttribute(
-                            'text',
-                            `value: Error de geolocalización: ${error.message}; color: red; align: center; width: 3;`
-                        );
-                    }
-                    
-                    // Crear entidades en modo dirección visual si hay error de geolocalización
-                    if (!entitiesCreated) {
-                        currentMode = 'direction';
-                        createDirectionBasedEntities();
-                    }
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
+            // Crear entidades inmediatamente en modo dirección visual para mostrar algo
+            if (currentMode === 'direction') {
+                createDirectionBasedEntities();
+            }
             
-            // Monitorear cambios en la posición
-            const watchId = navigator.geolocation.watchPosition(
-                position => {
-                    userPosition = {
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                        accuracy: position.coords.accuracy
-                    };
-                    
-                    const statusEl = document.getElementById('status-message');
-                    if (statusEl) {
-                        statusEl.setAttribute(
-                            'text',
-                            `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}, Precisión: ${userPosition.accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
-                        );
-                    }
-                    
-                    log(`Posición actualizada: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
-                    
-                    // Crear entidades si aún no se han creado
-                    if (!entitiesCreated) {
-                        if (currentMode === 'location') {
-                            createLocationBasedEntities();
-                        } else {
-                            createDirectionBasedEntities();
+            // Verificar permisos de geolocalización
+            if ('geolocation' in navigator) {
+                log('Geolocalización disponible');
+                
+                // Solicitar permisos de geolocalización
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        userPosition = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        };
+                        
+                        log(`Posición obtenida: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
+                        
+                        // Actualizar mensaje de estado
+                        const statusEl = document.getElementById('status-message');
+                        if (statusEl) {
+                            statusEl.setAttribute(
+                                'text',
+                                `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}; color: white; align: center; width: 3;`
+                            );
                         }
-                    }
-                    
-                    // Actualizar distancias a los cims si estamos en modo dirección visual
-                    if (currentMode === 'direction') {
-                        cims.forEach(cim => {
-                            // Calcular distancia aproximada
-                            const R = 6371; // Radio de la Tierra en km
-                            const dLat = (cim.latitude - userPosition.latitude) * Math.PI / 180;
-                            const dLon = (cim.longitude - userPosition.longitude) * Math.PI / 180;
-                            const a = 
-                                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                                Math.cos(userPosition.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
-                                Math.sin(dLon/2) * Math.sin(dLon/2);
-                            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                            const distance = R * c;
-                            
-                            // Actualizar texto de distancia
-                            const entity = document.getElementById(`cim-${cim.id}`);
-                            if (entity) {
-                                const distTexts = entity.querySelectorAll('a-text');
-                                if (distTexts.length >= 3) {
-                                    distTexts[2].setAttribute('value', `${distance.toFixed(1)} km`);
-                                }
+                        
+                        // Crear entidades para los cims si estamos en modo ubicación
+                        if (currentMode === 'location' && !entitiesCreated) {
+                            createLocationBasedEntities();
+                        }
+                    },
+                    error => {
+                        log(`Error de geolocalización: ${error.message} (código: ${error.code})`);
+                        
+                        // Actualizar mensaje de instrucciones
+                        const instructionEl = document.getElementById('instruction-message');
+                        if (instructionEl) {
+                            instructionEl.setAttribute(
+                                'text',
+                                `value: Error de geolocalización: ${error.message}; color: red; align: center; width: 3;`
+                            );
+                        }
+                        
+                        // Cambiar a modo dirección visual si hay error de geolocalización
+                        if (currentMode === 'location') {
+                            log('Cambiando a modo dirección visual debido a error de geolocalización');
+                            currentMode = 'direction';
+                            if (!entitiesCreated) {
+                                createDirectionBasedEntities();
                             }
-                        });
-                    }
-                },
-                error => {
-                    log(`Error en watchPosition: ${error.message}`);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
-        } else {
-            log('Geolocalización NO disponible en este dispositivo/navegador');
-            
-            // Actualizar mensaje de instrucciones
-            const instructionEl = document.getElementById('instruction-message');
-            if (instructionEl) {
-                instructionEl.setAttribute(
-                    'text',
-                    `value: Geolocalización no disponible en este dispositivo.; color: red; align: center; width: 3;`
+                        }
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
                 );
+                
+                // Monitorear cambios en la posición
+                const watchId = navigator.geolocation.watchPosition(
+                    position => {
+                        userPosition = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        };
+                        
+                        const statusEl = document.getElementById('status-message');
+                        if (statusEl) {
+                            statusEl.setAttribute(
+                                'text',
+                                `value: Lat: ${userPosition.latitude.toFixed(6)}, Lon: ${userPosition.longitude.toFixed(6)}, Precisión: ${userPosition.accuracy.toFixed(2)}m; color: white; align: center; width: 3;`
+                            );
+                        }
+                        
+                        log(`Posición actualizada: ${userPosition.latitude}, ${userPosition.longitude} (precisión: ${userPosition.accuracy}m)`);
+                        
+                        // Crear entidades si aún no se han creado y estamos en modo ubicación
+                        if (currentMode === 'location' && !entitiesCreated) {
+                            createLocationBasedEntities();
+                        }
+                        
+                        // Actualizar distancias a los cims si estamos en modo dirección visual
+                        if (currentMode === 'direction' && entitiesCreated) {
+                            cims.forEach(cim => {
+                                // Calcular distancia aproximada
+                                const R = 6371; // Radio de la Tierra en km
+                                const dLat = (cim.latitude - userPosition.latitude) * Math.PI / 180;
+                                const dLon = (cim.longitude - userPosition.longitude) * Math.PI / 180;
+                                const a = 
+                                    Math.sin(dLat/2) * Math.sin(dLat/2) +
+                                    Math.cos(userPosition.latitude * Math.PI / 180) * Math.cos(cim.latitude * Math.PI / 180) * 
+                                    Math.sin(dLon/2) * Math.sin(dLon/2);
+                                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                                const distance = R * c;
+                                
+                                // Actualizar texto de distancia
+                                const entity = document.getElementById(`cim-${cim.id}`);
+                                if (entity) {
+                                    const distTexts = entity.querySelectorAll('a-text');
+                                    if (distTexts.length >= 3) {
+                                        distTexts[2].setAttribute('value', `${distance.toFixed(1)} km`);
+                                    }
+                                }
+                            });
+                        }
+                    },
+                    error => {
+                        log(`Error en watchPosition: ${error.message}`);
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+            } else {
+                log('Geolocalización NO disponible en este dispositivo/navegador');
+                
+                // Actualizar mensaje de instrucciones
+                const instructionEl = document.getElementById('instruction-message');
+                if (instructionEl) {
+                    instructionEl.setAttribute(
+                        'text',
+                        `value: Geolocalización no disponible en este dispositivo.; color: red; align: center; width: 3;`
+                    );
+                }
+                
+                // Crear entidades en modo dirección visual si no hay geolocalización
+                currentMode = 'direction';
+                if (!entitiesCreated) {
+                    createDirectionBasedEntities();
+                }
             }
-            
-            // Crear entidades en modo dirección visual si no hay geolocalización
-            currentMode = 'direction';
-            createDirectionBasedEntities();
         }
         
         // Ocultar el loader cuando la escena esté lista
@@ -643,7 +725,12 @@
             log('Escena AR cargada');
             loader.style.display = 'none';
             
-            // Crear entidades después de que la escena esté cargada
+            // Limpiar el timeout de inicialización
+            if (initializationTimeout) {
+                clearTimeout(initializationTimeout);
+            }
+            
+            // Crear entidades después de que la escena esté cargada si aún no se han creado
             setTimeout(() => {
                 if (!entitiesCreated) {
                     log('Creando entidades después de cargar la escena...');
@@ -664,8 +751,7 @@
         
         document.addEventListener('camera-error', (error) => {
             log(`Error de cámara: ${error}`);
-        });  (error) => {
-            log(`Error de cámara: ${error}`);
+            showError(`Error de cámara: ${error}`);
         });
         
         // Recrear entidades cuando se da permiso a la cámara
@@ -681,6 +767,12 @@
                     }
                 }
             }, 1000);
+        });
+        
+        // Iniciar la experiencia AR
+        window.addEventListener('load', () => {
+            log('Página cargada, iniciando AR...');
+            initializeAR();
         });
     </script>
 </body>
