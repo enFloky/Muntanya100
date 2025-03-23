@@ -2,6 +2,8 @@
     {
       "id": 1,
       "nom": "Santa Brígida",
+      "lat": 42.0284,
+      "lon": 2.6166,
       "altitud": 464,
       "localització": "Amer, La Selva",
       "descripció": "Santa Brígida és una muntanya emblemàtica del poble d'Amer, amb bones vistes i una ermita al cim.",
