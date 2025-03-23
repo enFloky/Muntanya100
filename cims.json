@@ -8,5 +8,46 @@
     "localització": "Amer, La Selva",
     "descripció": "Santa Brígida és una muntanya emblemàtica del poble d'Amer, amb bones vistes i una ermita al cim.",
     "imatge": "https://photo620x400.mnstatic.com/8e3529f14b041137f961ec586ca6226c/ermita-de-santa-brigida-damer.jpg"
+  },
+  {
+    "id": 2,
+    "nom": "Puigsacalm",
+    "latitude": 42.1019,
+    "longitude": 2.4606,
+    "altitud": 1515,
+    "localització": "Vall d'en Bas, Garrotxa",
+    "descripció": "El Puigsacalm és un dels cims més emblemàtics de la Garrotxa, amb vistes panoràmiques excepcionals.",
+    "imatge": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/Vistas_cima_Puigsacalm.jpg/1280px-Vistas_cima_Puigsacalm.jpg"
+  },
+  {
+    "id": 3,
+    "nom": "Taga",
+    "latitude": 42.2814,
+    "longitude": 2.1833,
+    "altitud": 2040,
+    "localització": "Ripollès",
+    "descripció": "El Taga és una muntanya del Ripollès amb una silueta característica i vistes espectaculars del Pirineu.",
+    "imatge": "https://upload.wikimedia.org/wikipedia/commons/0/0c/Taga_des_de_Ribes_de_Freser.jpg"
+  },
+  {
+    "id": 4,
+    "nom": "Pedraforca",
+    "latitude": 42.2397,
+    "longitude": 1.7062,
+    "altitud": 2506,
+    "localització": "Berguedà",
+    "descripció": "El Pedraforca és una de les muntanyes més emblemàtiques de Catalunya, amb la seva característica forma de forca.",
+    "imatge": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Pedraforca.jpg"
+  },
+  {
+    "id": 5,
+    "nom": "Canigó",
+    "latitude": 42.5186,
+    "longitude": 2.4558,
+    "altitud": 2784,
+    "localització": "Catalunya Nord",
+    "descripció": "El Canigó és una muntanya mítica de la cultura catalana, situada al Pirineu Oriental.",
+    "imatge": "https://upload.wikimedia.org/wikipedia/commons/3/35/Canig%C3%B3.jpeg"
   }
 ]
+
